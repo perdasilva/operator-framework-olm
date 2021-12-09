@@ -33,30 +33,11 @@ type SatResolver struct {
 
 type SatSolverOption func(resolver *SatResolver)
 
-func WithRuntimeConstraintsProvider(provider runtime_constraints.RuntimeConstraintsProvider) SatSolverOption {
-	return func(satSolver *SatResolver) {
-		if satSolver != nil {
-			satSolver.runtimeConstraintsProvider = provider
-		}
-	}
-}
-
-func NewDefaultSatResolver(rcp cache.SourceProvider, catsrcLister v1alpha1listers.CatalogSourceLister, logger logrus.FieldLogger, opts ...SatSolverOption) *SatResolver {
-	satSolver := &SatResolver{
+func NewDefaultSatResolver(rcp cache.SourceProvider, catsrcLister v1alpha1listers.CatalogSourceLister, logger logrus.FieldLogger) *SatResolver {
+	return &SatResolver{
 		cache: cache.New(rcp, cache.WithLogger(logger), cache.WithCatalogSourceLister(catsrcLister)),
 		log:   logger,
 	}
-
-	fmt.Println("Doing stuff!!!")
-
-	// apply options
-	for _, opt := range opts {
-		opt(satSolver)
-	}
-	// See hack.go for more information
-	applyGlobalOptions(satSolver)
-
-	return satSolver
 }
 
 type debugWriter struct {
