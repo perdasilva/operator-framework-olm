@@ -102,6 +102,7 @@ func main() {
 		logger.SetLevel(log.DebugLevel)
 	}
 	logger.Infof("log level %s", logger.Level)
+	logger.Info("Hello, how are you?")
 
 	// If the catalogNamespaceEnvVarName environment variable is set, then  update the value of catalogNamespace.
 	if catalogNamespaceEnvVarValue := os.Getenv(catalogNamespaceEnvVarName); catalogNamespaceEnvVarValue != "" {

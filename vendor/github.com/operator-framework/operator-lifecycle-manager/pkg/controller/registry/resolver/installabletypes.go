@@ -51,6 +51,11 @@ func (i *BundleInstallable) BundleSourceInfo() (string, string, cache.SourceKey,
 	return csvName, channel, catalog, nil
 }
 
+func (i *BundleInstallable) AddRuntimeConstraintFailure(message string) {
+	msg := fmt.Sprintf("%s violates a cluster runtime constraint: %s", i.identifier, message)
+	i.AddConstraint(PrettyConstraint(solver.Prohibited(), msg))
+}
+
 func bundleId(bundle, channel string, catalog cache.SourceKey) solver.Identifier {
 	return solver.IdentifierFromString(fmt.Sprintf("%s/%s/%s", catalog.String(), channel, bundle))
 }

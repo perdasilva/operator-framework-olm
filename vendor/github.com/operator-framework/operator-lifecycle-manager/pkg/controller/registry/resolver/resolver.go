@@ -15,6 +15,7 @@ import (
 	v1alpha1listers "github.com/operator-framework/operator-lifecycle-manager/pkg/api/client/listers/operators/v1alpha1"
 	"github.com/operator-framework/operator-lifecycle-manager/pkg/controller/registry/resolver/cache"
 	"github.com/operator-framework/operator-lifecycle-manager/pkg/controller/registry/resolver/projection"
+	"github.com/operator-framework/operator-lifecycle-manager/pkg/controller/registry/resolver/runtime_constraints"
 	"github.com/operator-framework/operator-lifecycle-manager/pkg/controller/registry/resolver/solver"
 	"github.com/operator-framework/operator-registry/pkg/api"
 	opregistry "github.com/operator-framework/operator-registry/pkg/registry"
@@ -25,9 +26,12 @@ type OperatorResolver interface {
 }
 
 type SatResolver struct {
-	cache cache.OperatorCacheProvider
-	log   logrus.FieldLogger
+	cache                      cache.OperatorCacheProvider
+	log                        logrus.FieldLogger
+	runtimeConstraintsProvider runtime_constraints.RuntimeConstraintsProvider
 }
+
+type SatSolverOption func(resolver *SatResolver)
 
 func NewDefaultSatResolver(rcp cache.SourceProvider, catsrcLister v1alpha1listers.CatalogSourceLister, logger logrus.FieldLogger) *SatResolver {
 	return &SatResolver{
@@ -567,6 +571,20 @@ func (r *SatResolver) addInvariants(namespacedCache cache.MultiCatalogOperatorFi
 				continue
 			}
 			packageConflictToInstallable[prop.PackageName] = append(packageConflictToInstallable[prop.PackageName], installable.Identifier())
+		}
+
+		// apply runtime constraints to packages that aren't already installed
+		if !catalog.Virtual() && r.runtimeConstraintsProvider != nil {
+			constraints, err := r.runtimeConstraintsProvider.Constraints()
+			if err != nil {
+				continue
+			}
+			for _, predicate := range constraints {
+				if !predicate.Test(op) {
+					bundleInstallable.AddRuntimeConstraintFailure(predicate.String())
+					break
+				}
+			}
 		}
 	}
 
