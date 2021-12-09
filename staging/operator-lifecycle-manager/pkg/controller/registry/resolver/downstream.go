@@ -1,13 +1,11 @@
 package resolver
 
 import (
-	"fmt"
 	configv1client "github.com/openshift/client-go/config/clientset/versioned/typed/config/v1"
 	"github.com/operator-framework/operator-lifecycle-manager/pkg/controller/registry/resolver/runtime_constraints"
 )
 
 func init() {
-	fmt.Println("Resolver init")
 	initHooks = append(initHooks, OpenShiftStepResolverInit)
 }
 
@@ -20,6 +18,8 @@ func OpenShiftStepResolverInit(stepResolver *OperatorStepResolver) error {
 	if stepResolver.satResolver.runtimeConstraintsProvider != nil {
 		panic("resolver already has a runtime constraint provider defined")
 	}
+
+	stepResolver.log.Debugf("*** Helloeeeeeee!!!!")
 
 	// create the cluster version client
 	clusterVersionClient := configv1client.New(stepResolver.kubeclient.Discovery().RESTClient())

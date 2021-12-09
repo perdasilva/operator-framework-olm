@@ -79,7 +79,7 @@ spec:
             - name: RELEASE_VERSION
               value: "0.0.1-snapshot"
             - name: RUNTIME_CONSTRAINTS
-              value: "/opt/olm/runtime_constraints.json"
+              value: true
       nodeSelector:
         kubernetes.io/os: linux
       tolerations:

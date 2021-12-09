@@ -19,7 +19,6 @@ const (
 
 type OCPRuntimeConstraintProvider struct {
 	clusterProperties ClusterProperties
-	constraints       []cache.Predicate
 }
 
 func NewOpenShiftRuntimeConstraintsProvider(cli configv1client.ClusterVersionsGetter) (RuntimeConstraintsProvider, error) {
