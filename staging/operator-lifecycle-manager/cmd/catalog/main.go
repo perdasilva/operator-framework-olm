@@ -82,6 +82,7 @@ func init() {
 }
 
 func main() {
+	fmt.Println("Say wwwuuuutt!")
 	// Get exit signal context
 	ctx, cancel := context.WithCancel(signals.Context())
 	defer cancel()
