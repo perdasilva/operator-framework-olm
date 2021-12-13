@@ -49,6 +49,7 @@ func (s *registrySource) Snapshot(ctx context.Context) (*cache.Snapshot, error) 
 
 	var operators []*cache.Entry
 	for b := it.Next(); b != nil; b = it.Next() {
+		s.logger.Printf("Package: %s (%s)\n", b.PackageName, b.Version)
 		defaultChannel, ok := defaultChannels[b.PackageName]
 		if !ok {
 			if p, err := s.client.GetPackage(ctx, b.PackageName); err != nil {

@@ -38,7 +38,7 @@ const (
 // config flags defined globally so that they appear on the test binary as well
 var (
 	kubeConfigPath = flag.String(
-		"kubeconfig", "", "absolute path to the kubeconfig file")
+		"kubeconf", "", "absolute path to the kubeconfig file")
 
 	wakeupInterval = flag.Duration(
 		"interval", defaultWakeupInterval, "wakeup interval")
@@ -102,7 +102,7 @@ func main() {
 		logger.SetLevel(log.DebugLevel)
 	}
 	logger.Infof("log level %s", logger.Level)
-	logger.Info("Hello, how are you?")
+	logger.Info("Hello, how are you???")
 
 	// If the catalogNamespaceEnvVarName environment variable is set, then  update the value of catalogNamespace.
 	if catalogNamespaceEnvVarValue := os.Getenv(catalogNamespaceEnvVarName); catalogNamespaceEnvVarValue != "" {
