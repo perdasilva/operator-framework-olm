@@ -15,7 +15,6 @@ import (
 	v1alpha1listers "github.com/operator-framework/operator-lifecycle-manager/pkg/api/client/listers/operators/v1alpha1"
 	"github.com/operator-framework/operator-lifecycle-manager/pkg/controller/registry/resolver/cache"
 	"github.com/operator-framework/operator-lifecycle-manager/pkg/controller/registry/resolver/projection"
-	"github.com/operator-framework/operator-lifecycle-manager/pkg/controller/registry/resolver/runtime_constraints"
 	"github.com/operator-framework/operator-lifecycle-manager/pkg/controller/registry/resolver/solver"
 	"github.com/operator-framework/operator-registry/pkg/api"
 	opregistry "github.com/operator-framework/operator-registry/pkg/registry"
@@ -26,9 +25,9 @@ type OperatorResolver interface {
 }
 
 type SatResolver struct {
-	cache                      cache.OperatorCacheProvider
-	log                        logrus.FieldLogger
-	runtimeConstraintsProvider runtime_constraints.RuntimeConstraintsProvider
+	cache                     cache.OperatorCacheProvider
+	log                       logrus.FieldLogger
+	systemConstraintsProvider solver.ConstraintProvider
 }
 
 type SatSolverOption func(resolver *SatResolver)
@@ -333,13 +332,13 @@ func (r *SatResolver) getBundleInstallables(preferredNamespace string, bundleSta
 			continue
 		}
 
-		bundleInstallable, err := NewBundleInstallableFromOperator(bundle)
+		bundleInstallable, err := r.toBundleInstallable(bundle)
 		if err != nil {
 			errs = append(errs, err)
 			continue
 		}
 
-		visited[bundle] = &bundleInstallable
+		visited[bundle] = bundleInstallable
 
 		dependencyPredicates, err := DependencyPredicates(bundle.Properties)
 		if err != nil {
@@ -388,12 +387,12 @@ func (r *SatResolver) getBundleInstallables(preferredNamespace string, bundleSta
 			// (after sorting) to remove all bundles that
 			// don't satisfy the dependency.
 			for _, b := range cache.Filter(sortedBundles, d) {
-				i, err := NewBundleInstallableFromOperator(b)
+				i, err := r.toBundleInstallable(b)
 				if err != nil {
 					errs = append(errs, err)
 					continue
 				}
-				installables[i.Identifier()] = &i
+				installables[i.Identifier()] = i
 				bundleDependencies = append(bundleDependencies, i.Identifier())
 				bundleStack = append(bundleStack, b)
 			}
@@ -403,7 +402,7 @@ func (r *SatResolver) getBundleInstallables(preferredNamespace string, bundleSta
 			))
 		}
 
-		installables[bundleInstallable.Identifier()] = &bundleInstallable
+		installables[bundleInstallable.Identifier()] = bundleInstallable
 	}
 
 	if len(errs) > 0 {
@@ -416,6 +415,23 @@ func (r *SatResolver) getBundleInstallables(preferredNamespace string, bundleSta
 	}
 
 	return ids, installables, nil
+}
+
+func (r *SatResolver) toBundleInstallable(entry *cache.Entry) (*BundleInstallable, error) {
+	bundleInstalleble, err := NewBundleInstallableFromOperator(entry)
+	if err != nil {
+		return nil, err
+	}
+
+	// apply system constraints if necessary
+	if r.systemConstraintsProvider != nil && !(entry.SourceInfo.Catalog.Virtual()) {
+		systemConstraints, err := r.systemConstraintsProvider.Constraints(entry)
+		if err != nil {
+			return nil, err
+		}
+		bundleInstalleble.constraints = append(bundleInstalleble.constraints, systemConstraints...)
+	}
+	return &bundleInstalleble, nil
 }
 
 func (r *SatResolver) inferProperties(csv *v1alpha1.ClusterServiceVersion, subs []*v1alpha1.Subscription) ([]*api.Property, error) {
@@ -571,20 +587,6 @@ func (r *SatResolver) addInvariants(namespacedCache cache.MultiCatalogOperatorFi
 				continue
 			}
 			packageConflictToInstallable[prop.PackageName] = append(packageConflictToInstallable[prop.PackageName], installable.Identifier())
-		}
-
-		// apply runtime constraints to packages that aren't already installed
-		if !catalog.Virtual() && r.runtimeConstraintsProvider != nil {
-			constraints, err := r.runtimeConstraintsProvider.Constraints()
-			if err != nil {
-				continue
-			}
-			for _, predicate := range constraints {
-				if !predicate.Test(op) {
-					bundleInstallable.AddRuntimeConstraintFailure(predicate.String())
-					break
-				}
-			}
 		}
 	}
 
