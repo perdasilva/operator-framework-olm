@@ -3,12 +3,19 @@
 We can use CRC as an Openshift-like environment within which to test downstream OLM. [CRC](https://developers.redhat.com/products/codeready-containers/overview) 
 is a tool for deploying a local Openshift cluster on your laptop.
 
+## Prerequisites
+
+1. [CRC](https://developers.redhat.com/products/codeready-containers/overview) binary is visible
+2. [OC](https://docs.openshift.com/container-platform/4.8/cli_reference/openshift_cli/getting-started-cli.html) binary is visible
+3. Login to the registry.ci.openshift.org registry; see [this](https://docs.ci.openshift.org/docs/how-tos/use-registries-in-build-farm/#how-do-i-log-in-to-pull-images-that-require-authentication).
+
 TL;DR
 
 1. Install [CRC](https://developers.redhat.com/products/codeready-containers/overview)
-2. `make crc` to provision a CRC cluster, build OLM, and deploy it on the cluster
-3. `export KUBECONFIG=~/.crc/machines/crc/kubeconfig`
-4. Execute e2e tests as you normally would, e.g., `make e2e/olm`
+2. Login to the Openshift CI repository: Navigate to the [console URL](https://console-openshift-console.apps.ci.l2s4.p1.openshiftapps.com/). After logging in to this cluster using the console, use the link in the top right “Copy login command” to authenticate your local oc CLI. Then you can run oc registry login to authenticate to the registry. 
+3. `make crc` to provision a CRC cluster, build OLM, and deploy it on the cluster
+4. `export KUBECONFIG=~/.crc/machines/crc/kubeconfig`
+5. Execute e2e tests as you normally would, e.g., `make e2e/olm`
 
 #### Gosh darn it, how does it work?
 
