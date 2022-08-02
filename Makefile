@@ -26,6 +26,7 @@ COLLECT_PROFILES_CMD := $(addprefix bin/, collect-profiles)
 OPM := $(addprefix bin/, opm)
 OLM_CMDS  := $(shell go list -mod=vendor $(OLM_PKG)/cmd/...)
 PSM_CMD := $(addprefix bin/, psm)
+OLM_AUTO_LABELER_CMD := $(addprefix bin/, olm-auto-labeler)
 REGISTRY_CMDS  := $(addprefix bin/, $(shell ls staging/operator-registry/cmd | grep -v opm))
 
 # Default image tag for build/olm-container and build/registry-container
@@ -59,7 +60,7 @@ build/registry:
 	$(MAKE) $(REGISTRY_CMDS) $(OPM)
 
 build/olm:
-	$(MAKE) $(PSM_CMD) $(OLM_CMDS) $(COLLECT_PROFILES_CMD)
+	$(MAKE) $(PSM_CMD) $(OLM_CMDS) $(COLLECT_PROFILES_CMD) $(OLM_AUTO_LABELER_CMD)
 
 $(OPM): version_flags=-ldflags "-X '$(REGISTRY_PKG)/cmd/opm/version.gitCommit=$(GIT_COMMIT)' -X '$(REGISTRY_PKG)/cmd/opm/version.opmVersion=$(OPM_VERSION)' -X '$(REGISTRY_PKG)/cmd/opm/version.buildDate=$(BUILD_DATE)'"
 $(OPM):
@@ -78,6 +79,9 @@ $(PSM_CMD): FORCE
 
 $(COLLECT_PROFILES_CMD): FORCE
 	go build $(GO_BUILD_OPTS) $(GO_BUILD_TAGS) -o $(COLLECT_PROFILES_CMD) $(ROOT_PKG)/cmd/collect-profiles
+
+$(OLM_AUTO_LABELER_CMD): FORCE
+	go build $(GO_BUILD_OPTS) $(GO_BUILD_TAGS) -o $(COLLECT_PROFILES_CMD) $(ROOT_PKG)/cmd/olm-auto-labeler
 
 .PHONY: cross
 cross: version_flags=-X '$(REGISTRY_PKG)/cmd/opm/version.gitCommit=$(GIT_COMMIT)' -X '$(REGISTRY_PKG)/cmd/opm/version.opmVersion=$(OPM_VERSION)' -X '$(REGISTRY_PKG)/cmd/opm/version.buildDate=$(BUILD_DATE)'

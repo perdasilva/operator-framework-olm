@@ -113,7 +113,7 @@ spec:
                       - "5443"
                       - --global-namespace
                       - openshift-marketplace
-                    image: quay.io/operator-framework/olm@sha256:de396b540b82219812061d0d753440d5655250c621c753ed1dc67d6154741607
+                    image: image-registry.openshift-image-registry.svc:5000/openshift/olm@sha256:5cabd6ee96bb542e3cf44f0c4b869d57d7e3fd2b55c88c4e0c106f5a82b796d9
                     imagePullPolicy: IfNotPresent
                     ports:
                       - containerPort: 5443
