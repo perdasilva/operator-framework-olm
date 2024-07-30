@@ -464,7 +464,7 @@ var _ = Describe("CSVs with a Webhook", func() {
 			cleanupCSV, err = createCSV(c, crc, csv, generatedNamespace.GetName(), false, false)
 			Expect(err).Should(BeNil())
 
-			_, err = fetchCSV(crc, generatedNamespace.GetName(), csv.Name, csvSucceededChecker)
+			_, err = fetchCSV(crc, csv.Name, generatedNamespace.GetName(), csvSucceededChecker)
 			Expect(err).Should(BeNil())
 
 			actualWebhook, err := getWebhookWithGenerateName(c, webhook.GenerateName)

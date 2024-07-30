@@ -1656,7 +1656,7 @@ var _ = Describe("ClusterServiceVersion", func() {
 				<-deleted
 			}()
 
-			_, err = fetchCSV(crc, generatedNamespace.GetName(), csv.Name, csvSucceededChecker)
+			_, err = fetchCSV(crc, csv.Name, generatedNamespace.GetName(), csvSucceededChecker)
 			Expect(err).ShouldNot(HaveOccurred())
 
 			// Should create Deployment
@@ -1740,7 +1740,7 @@ var _ = Describe("ClusterServiceVersion", func() {
 			Expect(err).ShouldNot(HaveOccurred())
 
 			By("Wait for CSV success")
-			_, err = fetchCSV(crc, generatedNamespace.GetName(), csv.GetName(), func(csv *operatorsv1alpha1.ClusterServiceVersion) bool {
+			_, err = fetchCSV(crc, csv.GetName(), generatedNamespace.GetName(), func(csv *operatorsv1alpha1.ClusterServiceVersion) bool {
 				By("Should create an APIService")
 				apiService, err := c.GetAPIService(apiServiceName)
 				if err != nil {
