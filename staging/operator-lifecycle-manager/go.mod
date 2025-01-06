@@ -2,7 +2,7 @@ module github.com/operator-framework/operator-lifecycle-manager
 
 go 1.22.6
 
-toolchain go1.23.4
+toolchain go1.22.9
 
 require (
 	github.com/blang/semver/v4 v4.0.0
