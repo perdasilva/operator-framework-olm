@@ -146,7 +146,11 @@ type AuditCustomRule struct {
 	// If unset, the 'Default' profile is used as the default.
 	//
 	// +required
+<<<<<<< HEAD
 	Profile AuditProfileType `json:"profile,omitempty"`
+=======
+	Profile AuditProfileType `json:"profile"`
+>>>>>>> b42b1b38fb (Fix TOCTOU race condition in ensureInstallPlan (#3682))
 }
 
 type APIServerServingCerts struct {
@@ -155,6 +159,10 @@ type APIServerServingCerts struct {
 	// the defaultServingCertificate will be used.
 	// +optional
 	// +listType=atomic
+<<<<<<< HEAD
+=======
+	// +kubebuilder:validation:MaxItems=32
+>>>>>>> b42b1b38fb (Fix TOCTOU race condition in ensureInstallPlan (#3682))
 	NamedCertificates []APIServerNamedServingCert `json:"namedCertificates,omitempty"`
 }
 
@@ -165,6 +173,10 @@ type APIServerNamedServingCert struct {
 	// Exact names trump over wildcard names. Explicit names defined here trump over extracted implicit names.
 	// +optional
 	// +listType=atomic
+<<<<<<< HEAD
+=======
+	// +kubebuilder:validation:MaxItems=64
+>>>>>>> b42b1b38fb (Fix TOCTOU race condition in ensureInstallPlan (#3682))
 	Names []string `json:"names,omitempty"`
 	// servingCertificate references a kubernetes.io/tls type secret containing the TLS cert info for serving secure traffic.
 	// The secret must exist in the openshift-config namespace and contain the following required fields:

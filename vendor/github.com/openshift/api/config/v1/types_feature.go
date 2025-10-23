@@ -112,6 +112,10 @@ type FeatureGateStatus struct {
 	// Only featureGates with .version in the ClusterVersion.status will be present in this list.
 	// +listType=map
 	// +listMapKey=version
+<<<<<<< HEAD
+=======
+	// +optional
+>>>>>>> b42b1b38fb (Fix TOCTOU race condition in ensureInstallPlan (#3682))
 	FeatureGates []FeatureGateDetails `json:"featureGates"`
 }
 

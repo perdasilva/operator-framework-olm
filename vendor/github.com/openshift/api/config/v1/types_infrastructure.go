@@ -62,11 +62,13 @@ type InfrastructureStatus struct {
 	// infrastructureName uniquely identifies a cluster with a human friendly name.
 	// Once set it should not be changed. Must be of max length 27 and must have only
 	// alphanumeric or hyphen characters.
+	// +optional
 	InfrastructureName string `json:"infrastructureName"`
 
 	// platform is the underlying infrastructure provider for the cluster.
 	//
 	// Deprecated: Use platformStatus.type instead.
+	// +optional
 	Platform PlatformType `json:"platform,omitempty"`
 
 	// platformStatus holds status information specific to the underlying
@@ -78,17 +80,20 @@ type InfrastructureStatus struct {
 	// etcd servers and clients.
 	// For more info: https://github.com/etcd-io/etcd/blob/329be66e8b3f9e2e6af83c123ff89297e49ebd15/Documentation/op-guide/clustering.md#dns-discovery
 	// deprecated: as of 4.7, this field is no longer set or honored.  It will be removed in a future release.
+	// +optional
 	EtcdDiscoveryDomain string `json:"etcdDiscoveryDomain"`
 
 	// apiServerURL is a valid URI with scheme 'https', address and
 	// optionally a port (defaulting to 443).  apiServerURL can be used by components like the web console
 	// to tell users where to find the Kubernetes API.
+	// +optional
 	APIServerURL string `json:"apiServerURL"`
 
 	// apiServerInternalURL is a valid URI with scheme 'https',
 	// address and optionally a port (defaulting to 443).  apiServerInternalURL can be used by components
 	// like kubelets, to contact the Kubernetes API server using the
 	// infrastructure provider rather than Kubernetes networking.
+	// +optional
 	APIServerInternalURL string `json:"apiServerInternalURI"`
 
 	// controlPlaneTopology expresses the expectations for operands that normally run on control nodes.
@@ -102,6 +107,10 @@ type InfrastructureStatus struct {
 	// +openshift:validation:FeatureGateAwareEnum:featureGate=HighlyAvailableArbiter,enum=HighlyAvailable;HighlyAvailableArbiter;SingleReplica;External
 	// +openshift:validation:FeatureGateAwareEnum:featureGate=DualReplica,enum=HighlyAvailable;SingleReplica;DualReplica;External
 	// +openshift:validation:FeatureGateAwareEnum:requiredFeatureGate=HighlyAvailableArbiter;DualReplica,enum=HighlyAvailable;HighlyAvailableArbiter;SingleReplica;DualReplica;External
+<<<<<<< HEAD
+=======
+	// +optional
+>>>>>>> b42b1b38fb (Fix TOCTOU race condition in ensureInstallPlan (#3682))
 	ControlPlaneTopology TopologyMode `json:"controlPlaneTopology"`
 
 	// infrastructureTopology expresses the expectations for infrastructure services that do not run on control
@@ -113,7 +122,12 @@ type InfrastructureStatus struct {
 	// NOTE: External topology mode is not applicable for this field.
 	// +kubebuilder:default=HighlyAvailable
 	// +kubebuilder:validation:Enum=HighlyAvailable;SingleReplica
+<<<<<<< HEAD
 	InfrastructureTopology TopologyMode `json:"infrastructureTopology"`
+=======
+	// +optional
+	InfrastructureTopology TopologyMode `json:"infrastructureTopology,omitempty"`
+>>>>>>> b42b1b38fb (Fix TOCTOU race condition in ensureInstallPlan (#3682))
 
 	// cpuPartitioning expresses if CPU partitioning is a currently enabled feature in the cluster.
 	// CPU Partitioning means that this cluster can support partitioning workloads to specific CPU Sets.
@@ -525,7 +539,11 @@ type AWSPlatformStatus struct {
 	//
 	// +default={"dnsType": "PlatformDefault"}
 	// +kubebuilder:default={"dnsType": "PlatformDefault"}
+<<<<<<< HEAD
 	// +openshift:enable:FeatureGate=AWSClusterHostedDNS
+=======
+	// +openshift:enable:FeatureGate=AWSClusterHostedDNSInstall
+>>>>>>> b42b1b38fb (Fix TOCTOU race condition in ensureInstallPlan (#3682))
 	// +optional
 	// +nullable
 	CloudLoadBalancerConfig *CloudLoadBalancerConfig `json:"cloudLoadBalancerConfig,omitempty"`
@@ -587,6 +605,22 @@ type AzurePlatformStatus struct {
 	// +listType=atomic
 	// +optional
 	ResourceTags []AzureResourceTag `json:"resourceTags,omitempty"`
+<<<<<<< HEAD
+=======
+
+	// cloudLoadBalancerConfig holds configuration related to DNS and cloud
+	// load balancers. It allows configuration of in-cluster DNS as an alternative
+	// to the platform default DNS implementation.
+	// When using the ClusterHosted DNS type, Load Balancer IP addresses
+	// must be provided for the API and internal API load balancers as well as the
+	// ingress load balancer.
+	//
+	// +default={"dnsType": "PlatformDefault"}
+	// +kubebuilder:default={"dnsType": "PlatformDefault"}
+	// +openshift:enable:FeatureGate=AzureClusterHostedDNSInstall
+	// +optional
+	CloudLoadBalancerConfig *CloudLoadBalancerConfig `json:"cloudLoadBalancerConfig,omitempty"`
+>>>>>>> b42b1b38fb (Fix TOCTOU race condition in ensureInstallPlan (#3682))
 }
 
 // AzureResourceTag is a tag to apply to Azure resources created for the cluster.
@@ -630,7 +664,11 @@ const (
 )
 
 // GCPServiceEndpointName is the name of the GCP Service Endpoint.
+<<<<<<< HEAD
 // +kubebuilder:validation:Enum=Compute;Container;CloudResourceManager;DNS;File;IAM;ServiceUsage;Storage;TagManager
+=======
+// +kubebuilder:validation:Enum=Compute;Container;CloudResourceManager;DNS;File;IAM;ServiceUsage;Storage
+>>>>>>> b42b1b38fb (Fix TOCTOU race condition in ensureInstallPlan (#3682))
 type GCPServiceEndpointName string
 
 const (
@@ -657,9 +695,12 @@ const (
 
 	// GCPServiceEndpointNameStorage is the name used for the GCP Storage Service endpoint.
 	GCPServiceEndpointNameStorage GCPServiceEndpointName = "Storage"
+<<<<<<< HEAD
 
 	// GCPServiceEndpointNameTagManager is the name used for the GCP Tag Manager Service endpoint.
 	GCPServiceEndpointNameTagManager GCPServiceEndpointName = "TagManager"
+=======
+>>>>>>> b42b1b38fb (Fix TOCTOU race condition in ensureInstallPlan (#3682))
 )
 
 // GCPServiceEndpoint store the configuration of a custom url to
@@ -697,8 +738,13 @@ type GCPServiceEndpoint struct {
 type GCPPlatformSpec struct{}
 
 // GCPPlatformStatus holds the current status of the Google Cloud Platform infrastructure provider.
+<<<<<<< HEAD
 // +openshift:validation:FeatureGateAwareXValidation:featureGate=GCPLabelsTags,rule="!has(oldSelf.resourceLabels) && !has(self.resourceLabels) || has(oldSelf.resourceLabels) && has(self.resourceLabels)",message="resourceLabels may only be configured during installation"
 // +openshift:validation:FeatureGateAwareXValidation:featureGate=GCPLabelsTags,rule="!has(oldSelf.resourceTags) && !has(self.resourceTags) || has(oldSelf.resourceTags) && has(self.resourceTags)",message="resourceTags may only be configured during installation"
+=======
+// +kubebuilder:validation:XValidation:rule="!has(oldSelf.resourceLabels) && !has(self.resourceLabels) || has(oldSelf.resourceLabels) && has(self.resourceLabels)",message="resourceLabels may only be configured during installation"
+// +kubebuilder:validation:XValidation:rule="!has(oldSelf.resourceTags) && !has(self.resourceTags) || has(oldSelf.resourceTags) && has(self.resourceTags)",message="resourceTags may only be configured during installation"
+>>>>>>> b42b1b38fb (Fix TOCTOU race condition in ensureInstallPlan (#3682))
 type GCPPlatformStatus struct {
 	// resourceGroupName is the Project ID for new GCP resources created for the cluster.
 	ProjectID string `json:"projectID"`
@@ -715,7 +761,10 @@ type GCPPlatformStatus struct {
 	// +listType=map
 	// +listMapKey=key
 	// +optional
+<<<<<<< HEAD
 	// +openshift:enable:FeatureGate=GCPLabelsTags
+=======
+>>>>>>> b42b1b38fb (Fix TOCTOU race condition in ensureInstallPlan (#3682))
 	ResourceLabels []GCPResourceLabel `json:"resourceLabels,omitempty"`
 
 	// resourceTags is a list of additional tags to apply to GCP resources created for the cluster.
@@ -726,7 +775,10 @@ type GCPPlatformStatus struct {
 	// +listType=map
 	// +listMapKey=key
 	// +optional
+<<<<<<< HEAD
 	// +openshift:enable:FeatureGate=GCPLabelsTags
+=======
+>>>>>>> b42b1b38fb (Fix TOCTOU race condition in ensureInstallPlan (#3682))
 	ResourceTags []GCPResourceTag `json:"resourceTags,omitempty"`
 
 	// This field was introduced and removed under tech preview.
@@ -743,7 +795,11 @@ type GCPPlatformStatus struct {
 	//
 	// +default={"dnsType": "PlatformDefault"}
 	// +kubebuilder:default={"dnsType": "PlatformDefault"}
+<<<<<<< HEAD
 	// +openshift:enable:FeatureGate=GCPClusterHostedDNS
+=======
+	// +openshift:enable:FeatureGate=GCPClusterHostedDNSInstall
+>>>>>>> b42b1b38fb (Fix TOCTOU race condition in ensureInstallPlan (#3682))
 	// +optional
 	// +nullable
 	CloudLoadBalancerConfig *CloudLoadBalancerConfig `json:"cloudLoadBalancerConfig,omitempty"`
@@ -755,10 +811,17 @@ type GCPPlatformStatus struct {
 	// The maximum number of endpoint overrides allowed is 9.
 	// +listType=map
 	// +listMapKey=name
+<<<<<<< HEAD
 	// +kubebuilder:validation:MaxItems=9
 	// +kubebuilder:validation:XValidation:rule="self.all(x, self.exists_one(y, x.name == y.name))",message="only 1 endpoint override is permitted per GCP service name"
 	// +optional
 	// +openshift:enable:FeatureGate=GCPCustomAPIEndpoints
+=======
+	// +kubebuilder:validation:MaxItems=8
+	// +kubebuilder:validation:XValidation:rule="self.all(x, self.exists_one(y, x.name == y.name))",message="only 1 endpoint override is permitted per GCP service name"
+	// +optional
+	// +openshift:enable:FeatureGate=GCPCustomAPIEndpointsInstall
+>>>>>>> b42b1b38fb (Fix TOCTOU race condition in ensureInstallPlan (#3682))
 	ServiceEndpoints []GCPServiceEndpoint `json:"serviceEndpoints,omitempty"`
 }
 
@@ -1008,7 +1071,10 @@ type BareMetalPlatformStatus struct {
 	// loadBalancer defines how the load balancer used by the cluster is configured.
 	// +default={"type": "OpenShiftManagedDefault"}
 	// +kubebuilder:default={"type": "OpenShiftManagedDefault"}
+<<<<<<< HEAD
 	// +openshift:enable:FeatureGate=BareMetalLoadBalancer
+=======
+>>>>>>> b42b1b38fb (Fix TOCTOU race condition in ensureInstallPlan (#3682))
 	// +optional
 	LoadBalancer *BareMetalPlatformLoadBalancer `json:"loadBalancer,omitempty"`
 
@@ -1222,7 +1288,10 @@ type OvirtPlatformStatus struct {
 	// loadBalancer defines how the load balancer used by the cluster is configured.
 	// +default={"type": "OpenShiftManagedDefault"}
 	// +kubebuilder:default={"type": "OpenShiftManagedDefault"}
+<<<<<<< HEAD
 	// +openshift:enable:FeatureGate=BareMetalLoadBalancer
+=======
+>>>>>>> b42b1b38fb (Fix TOCTOU race condition in ensureInstallPlan (#3682))
 	// +optional
 	LoadBalancer *OvirtPlatformLoadBalancer `json:"loadBalancer,omitempty"`
 }
@@ -1559,8 +1628,12 @@ type VSpherePlatformSpec struct {
 	// + If VCenters is not defined use the existing cloud-config configmap defined
 	// + in openshift-config.
 	// +kubebuilder:validation:MinItems=0
+<<<<<<< HEAD
 	// +openshift:validation:FeatureGateAwareMaxItems:featureGate="",maxItems=1
 	// +openshift:validation:FeatureGateAwareMaxItems:featureGate=VSphereMultiVCenters,maxItems=3
+=======
+	// +kubebuilder:validation:MaxItems=3
+>>>>>>> b42b1b38fb (Fix TOCTOU race condition in ensureInstallPlan (#3682))
 	// +kubebuilder:validation:XValidation:rule="size(self) != size(oldSelf) ? size(oldSelf) == 0 && size(self) < 2 : true",message="vcenters cannot be added or removed once set"
 	// +listType=atomic
 	// +optional
@@ -1672,7 +1745,10 @@ type VSpherePlatformStatus struct {
 	// loadBalancer defines how the load balancer used by the cluster is configured.
 	// +default={"type": "OpenShiftManagedDefault"}
 	// +kubebuilder:default={"type": "OpenShiftManagedDefault"}
+<<<<<<< HEAD
 	// +openshift:enable:FeatureGate=BareMetalLoadBalancer
+=======
+>>>>>>> b42b1b38fb (Fix TOCTOU race condition in ensureInstallPlan (#3682))
 	// +optional
 	LoadBalancer *VSpherePlatformLoadBalancer `json:"loadBalancer,omitempty"`
 
@@ -2090,7 +2166,10 @@ type NutanixPlatformStatus struct {
 	// loadBalancer defines how the load balancer used by the cluster is configured.
 	// +default={"type": "OpenShiftManagedDefault"}
 	// +kubebuilder:default={"type": "OpenShiftManagedDefault"}
+<<<<<<< HEAD
 	// +openshift:enable:FeatureGate=BareMetalLoadBalancer
+=======
+>>>>>>> b42b1b38fb (Fix TOCTOU race condition in ensureInstallPlan (#3682))
 	// +optional
 	LoadBalancer *NutanixPlatformLoadBalancer `json:"loadBalancer,omitempty"`
 }

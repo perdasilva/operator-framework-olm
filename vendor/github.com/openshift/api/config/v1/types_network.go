@@ -93,11 +93,16 @@ type NetworkSpec struct {
 type NetworkStatus struct {
 	// IP address pool to use for pod IPs.
 	// +listType=atomic
+<<<<<<< HEAD
+=======
+	// +optional
+>>>>>>> b42b1b38fb (Fix TOCTOU race condition in ensureInstallPlan (#3682))
 	ClusterNetwork []ClusterNetworkEntry `json:"clusterNetwork,omitempty"`
 
 	// IP address pool for services.
 	// Currently, we only support a single entry here.
 	// +listType=atomic
+<<<<<<< HEAD
 	ServiceNetwork []string `json:"serviceNetwork,omitempty"`
 
 	// networkType is the plugin that is deployed (e.g. OVNKubernetes).
@@ -107,6 +112,21 @@ type NetworkStatus struct {
 	ClusterNetworkMTU int `json:"clusterNetworkMTU,omitempty"`
 
 	// migration contains the cluster network migration configuration.
+=======
+	// +optional
+	ServiceNetwork []string `json:"serviceNetwork,omitempty"`
+
+	// networkType is the plugin that is deployed (e.g. OVNKubernetes).
+	// +optional
+	NetworkType string `json:"networkType,omitempty"`
+
+	// clusterNetworkMTU is the MTU for inter-pod networking.
+	// +optional
+	ClusterNetworkMTU int `json:"clusterNetworkMTU,omitempty"`
+
+	// migration contains the cluster network migration configuration.
+	// +optional
+>>>>>>> b42b1b38fb (Fix TOCTOU race condition in ensureInstallPlan (#3682))
 	Migration *NetworkMigration `json:"migration,omitempty"`
 
 	// conditions represents the observations of a network.config current state.

@@ -72,6 +72,13 @@ func addKnownTypes(scheme *runtime.Scheme) error {
 		&ImageDigestMirrorSetList{},
 		&ImageTagMirrorSet{},
 		&ImageTagMirrorSetList{},
+<<<<<<< HEAD
+=======
+		&ImagePolicy{},
+		&ImagePolicyList{},
+		&ClusterImagePolicy{},
+		&ClusterImagePolicyList{},
+>>>>>>> b42b1b38fb (Fix TOCTOU race condition in ensureInstallPlan (#3682))
 	)
 	metav1.AddToGroupVersion(scheme, GroupVersion)
 	return nil

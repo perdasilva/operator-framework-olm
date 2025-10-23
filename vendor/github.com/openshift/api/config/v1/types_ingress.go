@@ -150,7 +150,11 @@ type AWSIngressSpec struct {
 	// +unionDiscriminator
 	// +kubebuilder:validation:Enum:=NLB;Classic
 	// +required
+<<<<<<< HEAD
 	Type AWSLBType `json:"type,omitempty"`
+=======
+	Type AWSLBType `json:"type"`
+>>>>>>> b42b1b38fb (Fix TOCTOU race condition in ensureInstallPlan (#3682))
 }
 
 type AWSLBType string
