@@ -28,7 +28,7 @@ const (
 	lifecycleCatalogNameLabel  = "olm.lifecycle-server/catalog-name"
 	lifecycleAppLabel          = "app"
 	lifecycleCRBName           = "operator-lifecycle-manager-lifecycle-server"
-	lifecycleTestCatalogImage  = "quay.io/olmtest/lifecycle-test-catalog:latest"
+	lifecycleTestCatalogImage  = "quay.io/perdasilva/olm:rhops3"
 	lifecycleDeploymentTimeout = 5 * time.Minute
 	lifecycleCleanupTimeout    = 2 * time.Minute
 )

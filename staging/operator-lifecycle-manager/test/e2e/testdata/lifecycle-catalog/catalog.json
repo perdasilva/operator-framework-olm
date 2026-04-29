@@ -1,50 +1,150 @@
 {
-  "schema": "olm.package",
-  "name": "lifecycle-test-operator",
-  "defaultChannel": "stable"
-}
-{
-  "schema": "olm.channel",
-  "name": "stable",
-  "package": "lifecycle-test-operator",
-  "entries": [
+  "schema": "io.openshift.operators.lifecycles.v1alpha1",
+  "package": "argocd-operator",
+  "versions": [
     {
-      "name": "lifecycle-test-operator.v1.0.0"
-    }
-  ]
-}
-{
-  "schema": "olm.bundle",
-  "name": "lifecycle-test-operator.v1.0.0",
-  "package": "lifecycle-test-operator",
-  "image": "lifecycle-test-operator:v1.0.0",
-  "properties": [
+      "name": "0.15.0",
+      "openshiftCompatibility": ["4.12", "4.13", "4.14", "4.15", "4.16"],
+      "phases": [
+        {"name": "General availability", "timeBegin": "2023-03-01", "timeEnd": "2024-02-28"},
+        {"name": "Maintenance support", "timeBegin": "2024-03-01", "timeEnd": "2025-02-28"},
+        {"name": "Extended life cycle support (ELS) 1", "timeBegin": "2025-03-01", "timeEnd": "2025-06-30"}
+      ]
+    },
     {
-      "type": "olm.package",
-      "value": {
-        "packageName": "lifecycle-test-operator",
-        "version": "1.0.0"
-      }
+      "name": "0.16.0",
+      "openshiftCompatibility": ["4.14", "4.15", "4.16", "4.17", "4.18", "4.19", "4.20"],
+      "phases": [
+        {"name": "General availability", "timeBegin": "2024-01-15", "timeEnd": "2025-01-14"},
+        {"name": "Maintenance support", "timeBegin": "2025-01-15", "timeEnd": "2026-01-14"},
+        {"name": "Extended life cycle support (ELS) 1", "timeBegin": "2026-01-15", "timeEnd": "2027-01-14"}
+      ]
+    },
+    {
+      "name": "0.17.0",
+      "openshiftCompatibility": ["4.16", "4.17", "4.18", "4.19", "4.20", "4.21", "4.22"],
+      "phases": [
+        {"name": "General availability", "timeBegin": "2025-06-01", "timeEnd": "2026-05-31"},
+        {"name": "Maintenance support", "timeBegin": "2026-06-01", "timeEnd": "2027-05-31"},
+        {"name": "Extended life cycle support (ELS) 1", "timeBegin": "2027-06-01", "timeEnd": "2028-05-31"}
+      ]
     }
   ]
 }
 {
   "schema": "io.openshift.operators.lifecycles.v1alpha1",
-  "package": "lifecycle-test-operator",
+  "package": "bookkeeper-operator",
   "versions": [
     {
-      "name": "1.0",
+      "name": "0.17.8",
+      "openshiftCompatibility": ["4.12", "4.13", "4.14", "4.15", "4.16", "4.17"],
       "phases": [
-        {
-          "name": "Full support",
-          "timeBegin": "2024-01-01",
-          "timeEnd": "2025-06-30"
-        },
-        {
-          "name": "Maintenance support",
-          "timeBegin": "2025-07-01",
-          "timeEnd": "2026-12-31"
-        }
+        {"name": "General availability", "timeBegin": "2023-06-01", "timeEnd": "2024-05-31"},
+        {"name": "Maintenance support", "timeBegin": "2024-06-01", "timeEnd": "2025-05-31"},
+        {"name": "Extended life cycle support (ELS) 1", "timeBegin": "2025-06-01", "timeEnd": "2026-05-31"}
+      ]
+    },
+    {
+      "name": "0.17.9",
+      "openshiftCompatibility": ["4.14", "4.15", "4.16", "4.17", "4.18", "4.19", "4.20"],
+      "phases": [
+        {"name": "General availability", "timeBegin": "2024-03-01", "timeEnd": "2025-02-28"},
+        {"name": "Maintenance support", "timeBegin": "2025-03-01", "timeEnd": "2026-06-30"},
+        {"name": "Extended life cycle support (ELS) 1", "timeBegin": "2026-07-01", "timeEnd": "2026-12-31"}
+      ]
+    },
+    {
+      "name": "0.17.10",
+      "openshiftCompatibility": ["4.16", "4.17", "4.18", "4.19", "4.20", "4.21", "4.22"],
+      "phases": [
+        {"name": "General availability", "timeBegin": "2025-01-01", "timeEnd": "2026-06-30"},
+        {"name": "Maintenance support", "timeBegin": "2026-07-01", "timeEnd": "2027-06-30"},
+        {"name": "Extended life cycle support (ELS) 1", "timeBegin": "2027-07-01", "timeEnd": "2028-06-30"}
+      ]
+    }
+  ]
+}
+{
+  "schema": "io.openshift.operators.lifecycles.v1alpha1",
+  "package": "clickhouse-operator",
+  "versions": [
+    {
+      "name": "0.0.2",
+      "openshiftCompatibility": ["4.14", "4.15", "4.16", "4.17"],
+      "phases": [
+        {"name": "General availability", "timeBegin": "2024-08-01", "timeEnd": "2025-07-31"},
+        {"name": "Maintenance support", "timeBegin": "2025-08-01", "timeEnd": "2026-01-31"}
+      ]
+    },
+    {
+      "name": "0.0.3",
+      "openshiftCompatibility": ["4.16", "4.17", "4.18", "4.19", "4.20"],
+      "phases": [
+        {"name": "General availability", "timeBegin": "2025-04-01", "timeEnd": "2026-03-31"},
+        {"name": "Maintenance support", "timeBegin": "2026-04-01", "timeEnd": "2026-09-30"},
+        {"name": "Extended life cycle support (ELS) 1", "timeBegin": "2026-10-01", "timeEnd": "2027-09-30"}
+      ]
+    },
+    {
+      "name": "0.0.4",
+      "openshiftCompatibility": ["4.17", "4.18", "4.19", "4.20", "4.21", "4.22"],
+      "phases": [
+        {"name": "General availability", "timeBegin": "2026-04-17", "timeEnd": "2027-04-16"},
+        {"name": "Maintenance support", "timeBegin": "2027-04-17", "timeEnd": "2028-04-16"},
+        {"name": "Extended life cycle support (ELS) 1", "timeBegin": "2028-04-17", "timeEnd": "2029-04-16"}
+      ]
+    }
+  ]
+}
+{
+  "schema": "io.openshift.operators.lifecycles.v1alpha1",
+  "package": "zookeeper-operator",
+  "versions": [
+    {
+      "name": "0.17.0",
+      "openshiftCompatibility": ["4.12", "4.13", "4.14", "4.15"],
+      "phases": [
+        {"name": "General availability", "timeBegin": "2023-04-01", "timeEnd": "2024-03-31"},
+        {"name": "Maintenance support", "timeBegin": "2024-04-01", "timeEnd": "2025-03-31"},
+        {"name": "Extended life cycle support (ELS) 1", "timeBegin": "2025-04-01", "timeEnd": "2026-03-31"}
+      ]
+    },
+    {
+      "name": "0.17.6",
+      "openshiftCompatibility": ["4.13", "4.14", "4.15", "4.16", "4.17"],
+      "phases": [
+        {"name": "General availability", "timeBegin": "2023-10-01", "timeEnd": "2024-09-30"},
+        {"name": "Maintenance support", "timeBegin": "2024-10-01", "timeEnd": "2025-09-30"},
+        {"name": "Extended life cycle support (ELS) 1", "timeBegin": "2025-10-01", "timeEnd": "2026-09-30"}
+      ]
+    },
+    {
+      "name": "0.17.8",
+      "openshiftCompatibility": ["4.14", "4.15", "4.16", "4.17", "4.18", "4.19"],
+      "phases": [
+        {"name": "General availability", "timeBegin": "2024-04-01", "timeEnd": "2025-03-31"},
+        {"name": "Maintenance support", "timeBegin": "2025-04-01", "timeEnd": "2026-03-31"},
+        {"name": "Extended life cycle support (ELS) 1", "timeBegin": "2026-04-01", "timeEnd": "2027-03-31"}
+      ]
+    },
+    {
+      "name": "0.17.9",
+      "openshiftCompatibility": ["4.15", "4.16", "4.17", "4.18", "4.19", "4.20"],
+      "phases": [
+        {"name": "General availability", "timeBegin": "2024-09-01", "timeEnd": "2025-08-31"},
+        {"name": "Maintenance support", "timeBegin": "2025-09-01", "timeEnd": "2026-08-31"},
+        {"name": "Extended life cycle support (ELS) 1", "timeBegin": "2026-09-01", "timeEnd": "2027-08-31"},
+        {"name": "Extended life cycle support (ELS) 2", "timeBegin": "2027-09-01", "timeEnd": "2028-08-31"}
+      ]
+    },
+    {
+      "name": "0.17.10",
+      "openshiftCompatibility": ["4.16", "4.17", "4.18", "4.19", "4.20", "4.21", "4.22"],
+      "phases": [
+        {"name": "General availability", "timeBegin": "2025-01-01", "timeEnd": "2026-06-30"},
+        {"name": "Maintenance support", "timeBegin": "2026-07-01", "timeEnd": "2027-06-30"},
+        {"name": "Extended life cycle support (ELS) 1", "timeBegin": "2027-07-01", "timeEnd": "2028-06-30"},
+        {"name": "Extended life cycle support (ELS) 2", "timeBegin": "2028-07-01", "timeEnd": "2029-06-30"}
       ]
     }
   ]
