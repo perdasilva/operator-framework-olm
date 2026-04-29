@@ -49,10 +49,10 @@ rules:
   - apiGroups: ["networking.k8s.io"]
     resources: ["networkpolicies"]
     verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
-  # Manage lifecycle-server clusterrolebindings (SSA apply only)
+  # Manage lifecycle-server clusterrolebindings
   - apiGroups: ["rbac.authorization.k8s.io"]
     resources: ["clusterrolebindings"]
-    verbs: ["get", "create", "update", "patch"]
+    verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
   # Required to grant these permissions to lifecycle-server via CRB
   - apiGroups: ["authentication.k8s.io"]
     resources: ["tokenreviews"]
