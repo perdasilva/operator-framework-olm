@@ -550,6 +550,20 @@ func TestMatchesCatalogSource(t *testing.T) {
 			expected:      false,
 		},
 		{
+			name:          "field selector matches namespace",
+			labelSelector: "",
+			fieldSelector: "metadata.namespace=test-ns",
+			cs:            newCatalogSource("test", "test-ns", nil),
+			expected:      true,
+		},
+		{
+			name:          "field selector does not match namespace",
+			labelSelector: "",
+			fieldSelector: "metadata.namespace=other-ns",
+			cs:            newCatalogSource("test", "test-ns", nil),
+			expected:      false,
+		},
+		{
 			name:          "field selector matches name",
 			labelSelector: "",
 			fieldSelector: "metadata.name=test",
@@ -611,9 +625,25 @@ func TestReconcile_CatalogSourceNotFound(t *testing.T) {
 }
 
 func TestReconcile_CatalogSourceDoesNotMatchSelectors(t *testing.T) {
+	ctx := context.Background()
+	name := resourceName("test-catalog")
+
 	cs := newCatalogSource("test-catalog", "test-ns", map[string]string{"env": "dev"})
+	deploy := &appsv1.Deployment{
+		ObjectMeta: metav1.ObjectMeta{Name: name, Namespace: "test-ns"},
+	}
+	svc := &corev1.Service{
+		ObjectMeta: metav1.ObjectMeta{Name: name, Namespace: "test-ns"},
+	}
+	sa := &corev1.ServiceAccount{
+		ObjectMeta: metav1.ObjectMeta{Name: name, Namespace: "test-ns"},
+	}
+	np := &networkingv1.NetworkPolicy{
+		ObjectMeta: metav1.ObjectMeta{Name: name, Namespace: "test-ns"},
+	}
+
 	cl := testClientBuilder().
-		WithObjects(cs).
+		WithObjects(cs, deploy, svc, sa, np).
 		Build()
 
 	labelSel, err := labels.Parse("env=prod")
@@ -622,11 +652,24 @@ func TestReconcile_CatalogSourceDoesNotMatchSelectors(t *testing.T) {
 	r := testReconciler(cl)
 	r.CatalogSourceLabelSelector = labelSel
 
-	result, err := r.Reconcile(context.Background(), ctrl.Request{
+	result, err := r.Reconcile(ctx, ctrl.Request{
 		NamespacedName: types.NamespacedName{Name: "test-catalog", Namespace: "test-ns"},
 	})
 	require.NoError(t, err)
 	require.Equal(t, ctrl.Result{}, result)
+
+	// Verify all lifecycle-server resources are cleaned up
+	err = cl.Get(ctx, types.NamespacedName{Name: name, Namespace: "test-ns"}, &appsv1.Deployment{})
+	require.True(t, errors.IsNotFound(err), "Deployment should be deleted")
+
+	err = cl.Get(ctx, types.NamespacedName{Name: name, Namespace: "test-ns"}, &corev1.Service{})
+	require.True(t, errors.IsNotFound(err), "Service should be deleted")
+
+	err = cl.Get(ctx, types.NamespacedName{Name: name, Namespace: "test-ns"}, &corev1.ServiceAccount{})
+	require.True(t, errors.IsNotFound(err), "ServiceAccount should be deleted")
+
+	err = cl.Get(ctx, types.NamespacedName{Name: name, Namespace: "test-ns"}, &networkingv1.NetworkPolicy{})
+	require.True(t, errors.IsNotFound(err), "NetworkPolicy should be deleted")
 }
 
 func TestReconcile_NoPodRunning(t *testing.T) {
@@ -1142,6 +1185,10 @@ func TestReconcile_Idempotent(t *testing.T) {
 	err = cl.Get(ctx, types.NamespacedName{Name: clusterRoleBindingName}, &crb)
 	require.NoError(t, err)
 	require.Equal(t, clusterRoleName, crb.RoleRef.Name)
+	require.Len(t, crb.Subjects, 1)
+	require.Equal(t, "ServiceAccount", crb.Subjects[0].Kind)
+	require.Equal(t, name, crb.Subjects[0].Name)
+	require.Equal(t, "test-ns", crb.Subjects[0].Namespace)
 }
 
 // --- mapLifecycleResourceToCatalogSource tests ---
