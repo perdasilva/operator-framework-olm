@@ -2,6 +2,7 @@ package controllers
 
 import (
 	"context"
+	"fmt"
 	"strings"
 	"testing"
 
@@ -14,18 +15,21 @@ import (
 	networkingv1 "k8s.io/api/networking/v1"
 	rbacv1 "k8s.io/api/rbac/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
+	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/fields"
 	"k8s.io/apimachinery/pkg/labels"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/apimachinery/pkg/util/intstr"
+	"k8s.io/apimachinery/pkg/util/managedfields"
 	utilruntime "k8s.io/apimachinery/pkg/util/runtime"
 	corev1ac "k8s.io/client-go/applyconfigurations/core/v1"
 	clientgoscheme "k8s.io/client-go/kubernetes/scheme"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
+	"sigs.k8s.io/controller-runtime/pkg/client/interceptor"
 	"sigs.k8s.io/controller-runtime/pkg/event"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 )
@@ -35,6 +39,16 @@ func testScheme() *runtime.Scheme {
 	utilruntime.Must(clientgoscheme.AddToScheme(scheme))
 	utilruntime.Must(operatorsv1alpha1.AddToScheme(scheme))
 	return scheme
+}
+
+// testClientBuilder returns a fake client builder with the deduced type converter.
+// The default clientgoapplyconfigurations type converter has a schema mismatch for
+// NetworkPolicy types that causes SSA to fail with "expected objects with types
+// from the same schema". Using the deduced converter avoids this.
+func testClientBuilder() *fake.ClientBuilder {
+	return fake.NewClientBuilder().
+		WithScheme(testScheme()).
+		WithTypeConverters(managedfields.NewDeducedTypeConverter())
 }
 
 func testReconciler(cl client.Client) *LifecycleServerReconciler {
@@ -585,8 +599,7 @@ func TestMatchesCatalogSource(t *testing.T) {
 // --- Reconcile integration tests with fake client ---
 
 func TestReconcile_CatalogSourceNotFound(t *testing.T) {
-	scheme := testScheme()
-	cl := fake.NewClientBuilder().WithScheme(scheme).Build()
+	cl := testClientBuilder().Build()
 	r := testReconciler(cl)
 
 	// Reconcile a CatalogSource that doesn't exist - should not error
@@ -598,10 +611,8 @@ func TestReconcile_CatalogSourceNotFound(t *testing.T) {
 }
 
 func TestReconcile_CatalogSourceDoesNotMatchSelectors(t *testing.T) {
-	scheme := testScheme()
 	cs := newCatalogSource("test-catalog", "test-ns", map[string]string{"env": "dev"})
-	cl := fake.NewClientBuilder().
-		WithScheme(scheme).
+	cl := testClientBuilder().
 		WithObjects(cs).
 		Build()
 
@@ -619,10 +630,8 @@ func TestReconcile_CatalogSourceDoesNotMatchSelectors(t *testing.T) {
 }
 
 func TestReconcile_NoPodRunning(t *testing.T) {
-	scheme := testScheme()
 	cs := newCatalogSource("test-catalog", "test-ns", nil)
-	cl := fake.NewClientBuilder().
-		WithScheme(scheme).
+	cl := testClientBuilder().
 		WithObjects(cs).
 		Build()
 
@@ -636,12 +645,10 @@ func TestReconcile_NoPodRunning(t *testing.T) {
 }
 
 func TestReconcile_MatchingCatalogSourceWithRunningPod(t *testing.T) {
-	scheme := testScheme()
 	cs := newCatalogSource("test-catalog", "test-ns", nil)
 	pod := catalogPod("test-catalog", "test-ns", "worker-1", "sha256:abc123", corev1.PodRunning)
 
-	cl := fake.NewClientBuilder().
-		WithScheme(scheme).
+	cl := testClientBuilder().
 		WithObjects(cs, pod).
 		Build()
 
@@ -692,7 +699,6 @@ func TestReconcile_MatchingCatalogSourceWithRunningPod(t *testing.T) {
 // --- cleanupResources tests ---
 
 func TestCleanupResources(t *testing.T) {
-	scheme := testScheme()
 	name := resourceName("test-catalog")
 	ctx := context.Background()
 
@@ -711,8 +717,7 @@ func TestCleanupResources(t *testing.T) {
 			ObjectMeta: metav1.ObjectMeta{Name: name, Namespace: "test-ns"},
 		}
 
-		cl := fake.NewClientBuilder().
-			WithScheme(scheme).
+		cl := testClientBuilder().
 			WithObjects(deploy, svc, sa, np).
 			Build()
 
@@ -737,8 +742,7 @@ func TestCleanupResources(t *testing.T) {
 
 	t.Run("handles not-found resources gracefully", func(t *testing.T) {
 		// No resources exist
-		cl := fake.NewClientBuilder().
-			WithScheme(scheme).
+		cl := testClientBuilder().
 			Build()
 
 		r := testReconciler(cl)
@@ -751,11 +755,10 @@ func TestCleanupResources(t *testing.T) {
 // --- reconcileClusterRoleBinding tests ---
 
 func TestReconcileClusterRoleBinding(t *testing.T) {
-	scheme := testScheme()
 	ctx := context.Background()
 
 	t.Run("no matching CatalogSources produces CRB with no subjects", func(t *testing.T) {
-		cl := fake.NewClientBuilder().WithScheme(scheme).Build()
+		cl := testClientBuilder().Build()
 		r := testReconciler(cl)
 
 		err := r.reconcileClusterRoleBinding(ctx, logr.Discard())
@@ -776,8 +779,7 @@ func TestReconcileClusterRoleBinding(t *testing.T) {
 		sa1 := &corev1.ServiceAccount{ObjectMeta: metav1.ObjectMeta{Name: sa1Name, Namespace: "ns-a"}}
 		sa2 := &corev1.ServiceAccount{ObjectMeta: metav1.ObjectMeta{Name: sa2Name, Namespace: "ns-b"}}
 
-		cl := fake.NewClientBuilder().
-			WithScheme(scheme).
+		cl := testClientBuilder().
 			WithObjects(cs1, cs2, sa1, sa2).
 			Build()
 
@@ -801,8 +803,7 @@ func TestReconcileClusterRoleBinding(t *testing.T) {
 	t.Run("CatalogSource without SA is skipped", func(t *testing.T) {
 		cs := newCatalogSource("catalog-no-sa", "test-ns", nil)
 
-		cl := fake.NewClientBuilder().
-			WithScheme(scheme).
+		cl := testClientBuilder().
 			WithObjects(cs).
 			Build()
 
@@ -821,7 +822,6 @@ func TestReconcileClusterRoleBinding(t *testing.T) {
 // --- getCatalogPodInfo tests ---
 
 func TestGetCatalogPodInfo(t *testing.T) {
-	scheme := testScheme()
 	ctx := context.Background()
 
 	tt := []struct {
@@ -865,7 +865,7 @@ func TestGetCatalogPodInfo(t *testing.T) {
 
 	for _, tc := range tt {
 		t.Run(tc.name, func(t *testing.T) {
-			builder := fake.NewClientBuilder().WithScheme(scheme)
+			builder := testClientBuilder()
 			for _, p := range tc.pods {
 				builder = builder.WithObjects(p)
 			}
@@ -1040,7 +1040,6 @@ func TestMapPodToCatalogSource(t *testing.T) {
 // --- Reconcile deletion cleanup test ---
 
 func TestReconcile_CatalogSourceDeleted_CleansUpResources(t *testing.T) {
-	scheme := testScheme()
 	ctx := context.Background()
 	name := resourceName("test-catalog")
 
@@ -1058,8 +1057,7 @@ func TestReconcile_CatalogSourceDeleted_CleansUpResources(t *testing.T) {
 		ObjectMeta: metav1.ObjectMeta{Name: name, Namespace: "test-ns"},
 	}
 
-	cl := fake.NewClientBuilder().
-		WithScheme(scheme).
+	cl := testClientBuilder().
 		WithObjects(deploy, svc, sa, np).
 		Build()
 
@@ -1095,13 +1093,11 @@ func TestReconcile_CatalogSourceDeleted_CleansUpResources(t *testing.T) {
 // --- Reconcile idempotency test ---
 
 func TestReconcile_Idempotent(t *testing.T) {
-	scheme := testScheme()
 	ctx := context.Background()
 	cs := newCatalogSource("test-catalog", "test-ns", nil)
 	pod := catalogPod("test-catalog", "test-ns", "worker-1", "sha256:abc123", corev1.PodRunning)
 
-	cl := fake.NewClientBuilder().
-		WithScheme(scheme).
+	cl := testClientBuilder().
 		WithObjects(cs, pod).
 		Build()
 
@@ -1146,4 +1142,422 @@ func TestReconcile_Idempotent(t *testing.T) {
 	err = cl.Get(ctx, types.NamespacedName{Name: clusterRoleBindingName}, &crb)
 	require.NoError(t, err)
 	require.Equal(t, clusterRoleName, crb.RoleRef.Name)
+}
+
+// --- mapLifecycleResourceToCatalogSource tests ---
+
+func TestMapLifecycleResourceToCatalogSource(t *testing.T) {
+	tt := []struct {
+		name     string
+		obj      client.Object
+		expected []reconcile.Request
+	}{
+		{
+			name: "resource with valid lifecycle labels enqueues request",
+			obj: &appsv1.Deployment{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "test-catalog-lifecycle-server",
+					Namespace: "olm",
+					Labels: map[string]string{
+						appLabelKey:         appLabelVal,
+						catalogNameLabelKey: "test-catalog",
+					},
+				},
+			},
+			expected: []reconcile.Request{
+				{NamespacedName: types.NamespacedName{Name: "test-catalog", Namespace: "olm"}},
+			},
+		},
+		{
+			name: "resource with wrong app label is ignored",
+			obj: &appsv1.Deployment{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "other-deployment",
+					Namespace: "olm",
+					Labels: map[string]string{
+						appLabelKey:         "other-app",
+						catalogNameLabelKey: "test-catalog",
+					},
+				},
+			},
+			expected: nil,
+		},
+		{
+			name: "resource with empty catalog name label is ignored",
+			obj: &corev1.Service{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "test-svc",
+					Namespace: "olm",
+					Labels: map[string]string{
+						appLabelKey:         appLabelVal,
+						catalogNameLabelKey: "",
+					},
+				},
+			},
+			expected: nil,
+		},
+		{
+			name: "resource with missing catalog name label is ignored",
+			obj: &corev1.ServiceAccount{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "test-sa",
+					Namespace: "olm",
+					Labels: map[string]string{
+						appLabelKey: appLabelVal,
+					},
+				},
+			},
+			expected: nil,
+		},
+		{
+			name: "resource with no labels is ignored",
+			obj: &networkingv1.NetworkPolicy{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "test-np",
+					Namespace: "olm",
+				},
+			},
+			expected: nil,
+		},
+	}
+
+	for _, tc := range tt {
+		t.Run(tc.name, func(t *testing.T) {
+			result := mapLifecycleResourceToCatalogSource(context.Background(), tc.obj)
+			require.Equal(t, tc.expected, result)
+		})
+	}
+}
+
+// --- Reconcile: catalog image change test ---
+
+func TestReconcile_CatalogImageChange(t *testing.T) {
+	ctx := context.Background()
+
+	cs := newCatalogSource("test-catalog", "test-ns", nil)
+	pod := catalogPod("test-catalog", "test-ns", "worker-1", "sha256:digest-a", corev1.PodRunning)
+
+	cl := testClientBuilder().
+		WithObjects(cs, pod).
+		Build()
+
+	r := testReconciler(cl)
+
+	// First reconcile with digest A
+	_, err := r.Reconcile(ctx, ctrl.Request{
+		NamespacedName: types.NamespacedName{Name: "test-catalog", Namespace: "test-ns"},
+	})
+	require.NoError(t, err)
+
+	name := resourceName("test-catalog")
+	var deploy appsv1.Deployment
+	err = cl.Get(ctx, types.NamespacedName{Name: name, Namespace: "test-ns"}, &deploy)
+	require.NoError(t, err)
+
+	// Find the catalog volume and verify it uses digest A
+	foundA := false
+	for _, v := range deploy.Spec.Template.Spec.Volumes {
+		if v.Name == "catalog" && v.Image != nil {
+			require.Equal(t, "sha256:digest-a", v.Image.Reference)
+			foundA = true
+		}
+	}
+	require.True(t, foundA, "catalog volume with digest-a must exist")
+
+	// Update the pod's image ID to digest B
+	err = cl.Get(ctx, types.NamespacedName{Name: pod.Name, Namespace: pod.Namespace}, pod)
+	require.NoError(t, err)
+	pod.Status.ContainerStatuses[0].ImageID = "sha256:digest-b"
+	err = cl.Status().Update(ctx, pod)
+	require.NoError(t, err)
+
+	// Reconcile again
+	_, err = r.Reconcile(ctx, ctrl.Request{
+		NamespacedName: types.NamespacedName{Name: "test-catalog", Namespace: "test-ns"},
+	})
+	require.NoError(t, err)
+
+	// Verify the Deployment's catalog volume reference is updated to digest B
+	err = cl.Get(ctx, types.NamespacedName{Name: name, Namespace: "test-ns"}, &deploy)
+	require.NoError(t, err)
+
+	foundB := false
+	for _, v := range deploy.Spec.Template.Spec.Volumes {
+		if v.Name == "catalog" && v.Image != nil {
+			require.Equal(t, "sha256:digest-b", v.Image.Reference)
+			foundB = true
+		}
+	}
+	require.True(t, foundB, "catalog volume should be updated to digest-b")
+}
+
+// --- Reconcile: multiple CatalogSources in same namespace ---
+
+func TestReconcile_MultipleCatalogSourcesSameNamespace(t *testing.T) {
+	ctx := context.Background()
+
+	cs1 := newCatalogSource("catalog-alpha", "test-ns", nil)
+	cs2 := newCatalogSource("catalog-beta", "test-ns", nil)
+	pod1 := catalogPod("catalog-alpha", "test-ns", "worker-1", "sha256:aaa", corev1.PodRunning)
+	pod2 := catalogPod("catalog-beta", "test-ns", "worker-2", "sha256:bbb", corev1.PodRunning)
+
+	cl := testClientBuilder().
+		WithObjects(cs1, cs2, pod1, pod2).
+		Build()
+
+	r := testReconciler(cl)
+
+	// Reconcile both
+	for _, csName := range []string{"catalog-alpha", "catalog-beta"} {
+		_, err := r.Reconcile(ctx, ctrl.Request{
+			NamespacedName: types.NamespacedName{Name: csName, Namespace: "test-ns"},
+		})
+		require.NoError(t, err)
+	}
+
+	name1 := resourceName("catalog-alpha")
+	name2 := resourceName("catalog-beta")
+
+	// Each gets its own resources
+	for _, name := range []string{name1, name2} {
+		var sa corev1.ServiceAccount
+		err := cl.Get(ctx, types.NamespacedName{Name: name, Namespace: "test-ns"}, &sa)
+		require.NoError(t, err, "SA %s should exist", name)
+
+		var svc corev1.Service
+		err = cl.Get(ctx, types.NamespacedName{Name: name, Namespace: "test-ns"}, &svc)
+		require.NoError(t, err, "Service %s should exist", name)
+
+		var deploy appsv1.Deployment
+		err = cl.Get(ctx, types.NamespacedName{Name: name, Namespace: "test-ns"}, &deploy)
+		require.NoError(t, err, "Deployment %s should exist", name)
+
+		var np networkingv1.NetworkPolicy
+		err = cl.Get(ctx, types.NamespacedName{Name: name, Namespace: "test-ns"}, &np)
+		require.NoError(t, err, "NetworkPolicy %s should exist", name)
+	}
+
+	// ClusterRoleBinding has two subjects sorted alphabetically
+	var crb rbacv1.ClusterRoleBinding
+	err := cl.Get(ctx, types.NamespacedName{Name: clusterRoleBindingName}, &crb)
+	require.NoError(t, err)
+	require.Len(t, crb.Subjects, 2)
+	require.Equal(t, name1, crb.Subjects[0].Name)
+	require.Equal(t, name2, crb.Subjects[1].Name)
+}
+
+// --- Reconcile: detailed Deployment field validation ---
+
+func TestReconcile_DeploymentDetails(t *testing.T) {
+	ctx := context.Background()
+
+	cs := newCatalogSource("test-catalog", "test-ns", nil)
+	pod := catalogPod("test-catalog", "test-ns", "worker-1", "sha256:abc123", corev1.PodRunning)
+
+	cl := testClientBuilder().
+		WithObjects(cs, pod).
+		Build()
+
+	r := testReconciler(cl)
+
+	_, err := r.Reconcile(ctx, ctrl.Request{
+		NamespacedName: types.NamespacedName{Name: "test-catalog", Namespace: "test-ns"},
+	})
+	require.NoError(t, err)
+
+	name := resourceName("test-catalog")
+	var deploy appsv1.Deployment
+	err = cl.Get(ctx, types.NamespacedName{Name: name, Namespace: "test-ns"}, &deploy)
+	require.NoError(t, err)
+
+	podSpec := deploy.Spec.Template.Spec
+	container := podSpec.Containers[0]
+	annotations := deploy.Spec.Template.Annotations
+
+	// Node affinity: prefers the catalog pod's node
+	require.NotNil(t, podSpec.Affinity)
+	require.NotNil(t, podSpec.Affinity.NodeAffinity)
+	preferred := podSpec.Affinity.NodeAffinity.PreferredDuringSchedulingIgnoredDuringExecution
+	require.Len(t, preferred, 1)
+	require.Equal(t, int32(100), preferred[0].Weight)
+	require.Len(t, preferred[0].Preference.MatchExpressions, 1)
+	require.Equal(t, "kubernetes.io/hostname", preferred[0].Preference.MatchExpressions[0].Key)
+	require.Equal(t, []string{"worker-1"}, preferred[0].Preference.MatchExpressions[0].Values)
+
+	// Tolerations
+	require.Len(t, podSpec.Tolerations, 3)
+	require.Equal(t, "node-role.kubernetes.io/master", podSpec.Tolerations[0].Key)
+	require.Equal(t, corev1.TaintEffectNoSchedule, podSpec.Tolerations[0].Effect)
+	require.Equal(t, "node.kubernetes.io/unreachable", podSpec.Tolerations[1].Key)
+	require.Equal(t, corev1.TaintEffectNoExecute, podSpec.Tolerations[1].Effect)
+	require.NotNil(t, podSpec.Tolerations[1].TolerationSeconds)
+	require.Equal(t, int64(120), *podSpec.Tolerations[1].TolerationSeconds)
+	require.Equal(t, "node.kubernetes.io/not-ready", podSpec.Tolerations[2].Key)
+
+	// Pod security context
+	require.NotNil(t, podSpec.SecurityContext)
+	require.NotNil(t, podSpec.SecurityContext.RunAsNonRoot)
+	require.True(t, *podSpec.SecurityContext.RunAsNonRoot)
+	require.NotNil(t, podSpec.SecurityContext.SeccompProfile)
+	require.Equal(t, corev1.SeccompProfileTypeRuntimeDefault, podSpec.SecurityContext.SeccompProfile.Type)
+
+	// Container security context
+	require.NotNil(t, container.SecurityContext)
+	require.NotNil(t, container.SecurityContext.AllowPrivilegeEscalation)
+	require.False(t, *container.SecurityContext.AllowPrivilegeEscalation)
+	require.NotNil(t, container.SecurityContext.ReadOnlyRootFilesystem)
+	require.True(t, *container.SecurityContext.ReadOnlyRootFilesystem)
+	require.NotNil(t, container.SecurityContext.Capabilities)
+	require.Contains(t, container.SecurityContext.Capabilities.Drop, corev1.Capability("ALL"))
+
+	// Probes: liveness and readiness on /healthz:health (8081)
+	require.NotNil(t, container.LivenessProbe)
+	require.NotNil(t, container.LivenessProbe.HTTPGet)
+	require.Equal(t, "/healthz", container.LivenessProbe.HTTPGet.Path)
+	require.Equal(t, intstr.FromString("health"), container.LivenessProbe.HTTPGet.Port)
+	require.Equal(t, int32(30), container.LivenessProbe.InitialDelaySeconds)
+
+	require.NotNil(t, container.ReadinessProbe)
+	require.NotNil(t, container.ReadinessProbe.HTTPGet)
+	require.Equal(t, "/healthz", container.ReadinessProbe.HTTPGet.Path)
+	require.Equal(t, intstr.FromString("health"), container.ReadinessProbe.HTTPGet.Port)
+
+	// Resource requests
+	require.NotNil(t, container.Resources.Requests)
+	cpuReq := container.Resources.Requests[corev1.ResourceCPU]
+	require.Equal(t, resource.MustParse("10m"), cpuReq)
+	memReq := container.Resources.Requests[corev1.ResourceMemory]
+	require.Equal(t, resource.MustParse("50Mi"), memReq)
+
+	// GOMEMLIMIT env var
+	foundGOMEMLIMIT := false
+	for _, env := range container.Env {
+		if env.Name == "GOMEMLIMIT" {
+			require.Equal(t, "50MiB", env.Value)
+			foundGOMEMLIMIT = true
+		}
+	}
+	require.True(t, foundGOMEMLIMIT, "GOMEMLIMIT env var must be set")
+
+	// Priority class
+	require.Equal(t, "system-cluster-critical", podSpec.PriorityClassName)
+
+	// Annotations
+	require.Equal(t, `{"effect": "PreferredDuringScheduling"}`, annotations["target.workload.openshift.io/management"])
+	require.Equal(t, "restricted-v2", annotations["openshift.io/required-scc"])
+	require.Equal(t, "lifecycle-server", annotations["kubectl.kubernetes.io/default-container"])
+
+	// Node selector
+	require.Equal(t, "linux", podSpec.NodeSelector["kubernetes.io/os"])
+
+	// Container ports
+	require.Len(t, container.Ports, 2)
+	portNames := map[string]int32{}
+	for _, p := range container.Ports {
+		portNames[p.Name] = p.ContainerPort
+	}
+	require.Equal(t, int32(8443), portNames["api"])
+	require.Equal(t, int32(8081), portNames["health"])
+}
+
+// --- Reconcile: custom and default catalog dir ---
+
+func TestReconcile_CustomCatalogDir(t *testing.T) {
+	ctx := context.Background()
+
+	cs := &operatorsv1alpha1.CatalogSource{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "custom-catalog",
+			Namespace: "test-ns",
+		},
+		Spec: operatorsv1alpha1.CatalogSourceSpec{
+			SourceType: operatorsv1alpha1.SourceTypeGrpc,
+			Image:      "quay.io/test/catalog:latest",
+			GrpcPodConfig: &operatorsv1alpha1.GrpcPodConfig{
+				ExtractContent: &operatorsv1alpha1.ExtractContentConfig{
+					CatalogDir: "/custom-dir",
+				},
+			},
+		},
+	}
+	pod := catalogPod("custom-catalog", "test-ns", "worker-1", "sha256:abc123", corev1.PodRunning)
+
+	cl := testClientBuilder().
+		WithObjects(cs, pod).
+		Build()
+
+	r := testReconciler(cl)
+
+	_, err := r.Reconcile(ctx, ctrl.Request{
+		NamespacedName: types.NamespacedName{Name: "custom-catalog", Namespace: "test-ns"},
+	})
+	require.NoError(t, err)
+
+	name := resourceName("custom-catalog")
+	var deploy appsv1.Deployment
+	err = cl.Get(ctx, types.NamespacedName{Name: name, Namespace: "test-ns"}, &deploy)
+	require.NoError(t, err)
+
+	args := deploy.Spec.Template.Spec.Containers[0].Args
+	foundFBCArg := false
+	for _, arg := range args {
+		if arg == "--fbc-path=/catalog/custom-dir" {
+			foundFBCArg = true
+		}
+	}
+	require.True(t, foundFBCArg, "expected --fbc-path=/catalog/custom-dir in args %v", args)
+}
+
+func TestReconcile_DefaultCatalogDir(t *testing.T) {
+	ctx := context.Background()
+
+	cs := newCatalogSource("default-catalog", "test-ns", nil)
+	pod := catalogPod("default-catalog", "test-ns", "worker-1", "sha256:abc123", corev1.PodRunning)
+
+	cl := testClientBuilder().
+		WithObjects(cs, pod).
+		Build()
+
+	r := testReconciler(cl)
+
+	_, err := r.Reconcile(ctx, ctrl.Request{
+		NamespacedName: types.NamespacedName{Name: "default-catalog", Namespace: "test-ns"},
+	})
+	require.NoError(t, err)
+
+	name := resourceName("default-catalog")
+	var deploy appsv1.Deployment
+	err = cl.Get(ctx, types.NamespacedName{Name: name, Namespace: "test-ns"}, &deploy)
+	require.NoError(t, err)
+
+	args := deploy.Spec.Template.Spec.Containers[0].Args
+	foundFBCArg := false
+	for _, arg := range args {
+		if arg == "--fbc-path=/catalog/configs" {
+			foundFBCArg = true
+		}
+	}
+	require.True(t, foundFBCArg, "expected --fbc-path=/catalog/configs in args %v", args)
+}
+
+// --- getCatalogPodInfo: List error ---
+
+func TestGetCatalogPodInfo_ListError(t *testing.T) {
+	ctx := context.Background()
+
+	listErr := fmt.Errorf("simulated list error")
+	cl := testClientBuilder().
+		WithInterceptorFuncs(interceptor.Funcs{
+			List: func(_ context.Context, _ client.WithWatch, _ client.ObjectList, _ ...client.ListOption) error {
+				return listErr
+			},
+		}).
+		Build()
+
+	r := testReconciler(cl)
+	cs := newCatalogSource("test-catalog", "test-ns", nil)
+
+	_, _, err := r.getCatalogPodInfo(ctx, cs)
+	require.Error(t, err)
+	require.ErrorIs(t, err, listErr)
 }

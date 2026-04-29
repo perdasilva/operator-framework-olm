@@ -418,3 +418,23 @@ func TestLifecycleIndex_ListVersions(t *testing.T) {
 		})
 	}
 }
+
+func TestLoadLifecycleData_Subdirectory(t *testing.T) {
+	dir := t.TempDir()
+	subdir := filepath.Join(dir, "nested", "deep")
+	err := os.MkdirAll(subdir, 0755)
+	require.NoError(t, err)
+
+	writeFBCFile(t, subdir, "nested-catalog.json",
+		map[string]any{
+			"schema":  "io.openshift.operators.lifecycles.v1alpha1",
+			"package": "nested-operator",
+			"status":  "active",
+		},
+	)
+
+	result, err := LoadLifecycleData(dir)
+	require.NoError(t, err)
+	require.Contains(t, result, "v1alpha1")
+	require.Contains(t, result["v1alpha1"], "nested-operator")
+}
