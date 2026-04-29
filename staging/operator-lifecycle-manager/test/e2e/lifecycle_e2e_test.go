@@ -294,17 +294,19 @@ var _ = Describe("Lifecycle Server", Label("LifecycleServer"), func() {
 		Expect(err).ShouldNot(HaveOccurred())
 
 		By("verifying ClusterRoleBinding has exactly one subject remaining")
-		var crb rbacv1.ClusterRoleBinding
-		err = ctx.Ctx().Client().Get(context.Background(), types.NamespacedName{Name: lifecycleCRBName}, &crb)
-		Expect(err).ShouldNot(HaveOccurred())
+		Eventually(func(g Gomega) {
+			var crb rbacv1.ClusterRoleBinding
+			err := ctx.Ctx().Client().Get(context.Background(), types.NamespacedName{Name: lifecycleCRBName}, &crb)
+			g.Expect(err).ShouldNot(HaveOccurred())
 
-		hasSecond := false
-		for _, subj := range crb.Subjects {
-			Expect(subj.Name).NotTo(Equal(resName1), "Deleted SA should not be in CRB")
-			if subj.Name == resName2 && subj.Namespace == ns {
-				hasSecond = true
+			hasSecond := false
+			for _, subj := range crb.Subjects {
+				g.Expect(subj.Name).NotTo(Equal(resName1), "Deleted SA should not be in CRB")
+				if subj.Name == resName2 && subj.Namespace == ns {
+					hasSecond = true
+				}
 			}
-		}
-		Expect(hasSecond).To(BeTrue(), "Second SA should still be in CRB")
+			g.Expect(hasSecond).To(BeTrue(), "Second SA should still be in CRB")
+		}).WithTimeout(lifecycleCleanupTimeout).WithPolling(5 * time.Second).Should(Succeed())
 	})
 })

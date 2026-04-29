@@ -96,11 +96,14 @@ func TestTLSConfigProvider_ConcurrentAccess(t *testing.T) {
 	wg.Add(goroutines * 2)
 
 	// Half the goroutines read, half update
+	failed := make(chan string, goroutines)
 	for i := range goroutines {
 		go func() {
 			defer wg.Done()
 			cfg, _ := p.Get()
-			require.NotNil(t, cfg)
+			if cfg == nil {
+				failed <- "Get() returned nil config"
+			}
 		}()
 		go func(i int) {
 			defer wg.Done()
@@ -115,6 +118,11 @@ func TestTLSConfigProvider_ConcurrentAccess(t *testing.T) {
 	}
 
 	wg.Wait()
+	close(failed)
+
+	for msg := range failed {
+		t.Error(msg)
+	}
 
 	// Provider should still be functional after concurrent access
 	cfg, _ := p.Get()

@@ -2,6 +2,7 @@ package server
 
 import (
 	"encoding/json"
+	"fmt"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -158,6 +159,7 @@ func TestNewHandler_ConcurrentRequests(t *testing.T) {
 	var wg sync.WaitGroup
 	wg.Add(goroutines)
 
+	errCh := make(chan error, goroutines)
 	for range goroutines {
 		go func() {
 			defer wg.Done()
@@ -167,14 +169,27 @@ func TestNewHandler_ConcurrentRequests(t *testing.T) {
 
 			resp := rec.Result()
 			defer resp.Body.Close()
-			require.Equal(t, http.StatusOK, resp.StatusCode)
+			if resp.StatusCode != http.StatusOK {
+				errCh <- fmt.Errorf("expected status 200, got %d", resp.StatusCode)
+				return
+			}
 
 			body, err := io.ReadAll(resp.Body)
-			require.NoError(t, err)
-			require.Equal(t, string(testBlob), string(body))
+			if err != nil {
+				errCh <- fmt.Errorf("failed to read body: %w", err)
+				return
+			}
+			if string(body) != string(testBlob) {
+				errCh <- fmt.Errorf("body mismatch: got %q, want %q", string(body), string(testBlob))
+			}
 		}()
 	}
 	wg.Wait()
+	close(errCh)
+
+	for err := range errCh {
+		t.Error(err)
+	}
 }
 
 func TestNewHandler_MultipleVersions(t *testing.T) {
