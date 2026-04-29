@@ -1,0 +1,51 @@
+{
+  "schema": "olm.package",
+  "name": "lifecycle-test-operator",
+  "defaultChannel": "stable"
+}
+{
+  "schema": "olm.channel",
+  "name": "stable",
+  "package": "lifecycle-test-operator",
+  "entries": [
+    {
+      "name": "lifecycle-test-operator.v1.0.0"
+    }
+  ]
+}
+{
+  "schema": "olm.bundle",
+  "name": "lifecycle-test-operator.v1.0.0",
+  "package": "lifecycle-test-operator",
+  "image": "lifecycle-test-operator:v1.0.0",
+  "properties": [
+    {
+      "type": "olm.package",
+      "value": {
+        "packageName": "lifecycle-test-operator",
+        "version": "1.0.0"
+      }
+    }
+  ]
+}
+{
+  "schema": "io.openshift.operators.lifecycles.v1alpha1",
+  "package": "lifecycle-test-operator",
+  "versions": [
+    {
+      "name": "1.0",
+      "phases": [
+        {
+          "name": "Full support",
+          "timeBegin": "2024-01-01",
+          "timeEnd": "2025-06-30"
+        },
+        {
+          "name": "Maintenance support",
+          "timeBegin": "2025-07-01",
+          "timeEnd": "2026-12-31"
+        }
+      ]
+    }
+  ]
+}

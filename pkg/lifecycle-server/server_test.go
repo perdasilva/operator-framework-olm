@@ -5,6 +5,7 @@ import (
 	"io"
 	"net/http"
 	"net/http/httptest"
+	"sync"
 	"testing"
 
 	"github.com/go-logr/logr"
@@ -142,4 +143,69 @@ func TestNewHandler_RawBlobReturnedByteForByte(t *testing.T) {
 	body, err := io.ReadAll(resp.Body)
 	require.NoError(t, err)
 	require.Equal(t, string(originalBlob), string(body), "response body should be byte-for-byte identical to the stored blob")
+}
+
+func TestNewHandler_ConcurrentRequests(t *testing.T) {
+	testBlob := json.RawMessage(`{"status":"active","eol":"2025-12-31"}`)
+	data := LifecycleIndex{
+		"v1alpha1": {
+			"my-operator": testBlob,
+		},
+	}
+	handler := NewHandler(data, logr.Discard())
+
+	const goroutines = 50
+	var wg sync.WaitGroup
+	wg.Add(goroutines)
+
+	for range goroutines {
+		go func() {
+			defer wg.Done()
+			req := httptest.NewRequest(http.MethodGet, "/api/v1alpha1/lifecycles/my-operator", nil)
+			rec := httptest.NewRecorder()
+			handler.ServeHTTP(rec, req)
+
+			resp := rec.Result()
+			defer resp.Body.Close()
+			require.Equal(t, http.StatusOK, resp.StatusCode)
+
+			body, err := io.ReadAll(resp.Body)
+			require.NoError(t, err)
+			require.Equal(t, string(testBlob), string(body))
+		}()
+	}
+	wg.Wait()
+}
+
+func TestNewHandler_MultipleVersions(t *testing.T) {
+	blobV1Alpha1 := json.RawMessage(`{"version":"v1alpha1","status":"active"}`)
+	blobV1Beta1 := json.RawMessage(`{"version":"v1beta1","status":"deprecated"}`)
+
+	data := LifecycleIndex{
+		"v1alpha1": {"my-operator": blobV1Alpha1},
+		"v1beta1":  {"my-operator": blobV1Beta1},
+	}
+	handler := NewHandler(data, logr.Discard())
+
+	// Query v1alpha1
+	req := httptest.NewRequest(http.MethodGet, "/api/v1alpha1/lifecycles/my-operator", nil)
+	rec := httptest.NewRecorder()
+	handler.ServeHTTP(rec, req)
+	resp := rec.Result()
+	defer resp.Body.Close()
+	require.Equal(t, http.StatusOK, resp.StatusCode)
+	body, err := io.ReadAll(resp.Body)
+	require.NoError(t, err)
+	require.Equal(t, string(blobV1Alpha1), string(body))
+
+	// Query v1beta1
+	req2 := httptest.NewRequest(http.MethodGet, "/api/v1beta1/lifecycles/my-operator", nil)
+	rec2 := httptest.NewRecorder()
+	handler.ServeHTTP(rec2, req2)
+	resp2 := rec2.Result()
+	defer resp2.Body.Close()
+	require.Equal(t, http.StatusOK, resp2.StatusCode)
+	body2, err := io.ReadAll(resp2.Body)
+	require.NoError(t, err)
+	require.Equal(t, string(blobV1Beta1), string(body2))
 }
