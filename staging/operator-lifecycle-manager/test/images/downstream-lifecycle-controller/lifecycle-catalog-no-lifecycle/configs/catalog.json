@@ -1,0 +1,3 @@
+{"schema":"olm.package","name":"test-no-lifecycle-operator","defaultChannel":"stable"}
+{"schema":"olm.channel","name":"stable","package":"test-no-lifecycle-operator","entries":[{"name":"test-no-lifecycle-operator.v1.0.0"}]}
+{"schema":"olm.bundle","name":"test-no-lifecycle-operator.v1.0.0","package":"test-no-lifecycle-operator","image":"quay.io/olmtest/busybox-bundle:1.0.0","properties":[{"type":"olm.package","value":{"packageName":"test-no-lifecycle-operator","version":"1.0.0"}}]}

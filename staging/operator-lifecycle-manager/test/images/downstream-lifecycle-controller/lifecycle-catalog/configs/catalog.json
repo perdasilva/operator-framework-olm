@@ -1,0 +1,4 @@
+{"schema":"olm.package","name":"test-lifecycle-operator","defaultChannel":"stable"}
+{"schema":"olm.channel","name":"stable","package":"test-lifecycle-operator","entries":[{"name":"test-lifecycle-operator.v1.0.0"}]}
+{"schema":"olm.bundle","name":"test-lifecycle-operator.v1.0.0","package":"test-lifecycle-operator","image":"quay.io/olmtest/busybox-bundle:1.0.0","properties":[{"type":"olm.package","value":{"packageName":"test-lifecycle-operator","version":"1.0.0"}}]}
+{"schema":"io.openshift.operators.lifecycles.v1alpha1","package":"test-lifecycle-operator","status":"active","eol":"2030-12-31","supportCycle":"LTS"}
