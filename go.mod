@@ -12,8 +12,9 @@ require (
 	github.com/maxbrunsfeld/counterfeiter/v6 v6.12.2
 	github.com/mikefarah/yq/v3 v3.0.0-20201202084205-8846255d1c37
 	github.com/onsi/ginkgo/v2 v2.28.1
-	github.com/openshift/api v0.0.0-20260204104751-e09e5a4ebcd0
-	github.com/openshift/library-go v0.0.0-20260205095356-7bced6e899b6
+	github.com/openshift/api v0.0.0-20260429211050-21ed4c20b122
+	github.com/openshift/controller-runtime-common v0.0.0-20260204183245-642129afd14f
+	github.com/openshift/library-go v0.0.0-20260213153706-03f1709971c5
 	github.com/operator-framework/api v0.42.0
 	github.com/operator-framework/operator-lifecycle-manager v0.0.0-00010101000000-000000000000
 	github.com/operator-framework/operator-registry v1.65.0
@@ -30,7 +31,7 @@ require (
 	k8s.io/code-generator v0.35.4
 	k8s.io/klog/v2 v2.140.0
 	k8s.io/kube-openapi v0.0.0-20260127142750-a19766b6e2d4
-	k8s.io/utils v0.0.0-20260108192941-914a6e750570
+	k8s.io/utils v0.0.0-20260210185600-b8788abfbbc2
 	sigs.k8s.io/controller-runtime v0.23.3
 	sigs.k8s.io/controller-tools v0.20.1
 )
@@ -159,7 +160,7 @@ require (
 	github.com/opencontainers/go-digest v1.0.0 // indirect
 	github.com/opencontainers/image-spec v1.1.1 // indirect
 	github.com/opencontainers/runtime-spec v1.3.0 // indirect
-	github.com/openshift/client-go v0.0.0-20260108185524-48f4ccfc4e13 // indirect
+	github.com/openshift/client-go v0.0.0-20260429123927-c81f86abfa6a // indirect
 	github.com/otiai10/copy v1.14.1 // indirect
 	github.com/otiai10/mint v1.6.3 // indirect
 	github.com/pkg/errors v0.9.1 // indirect
@@ -249,3 +250,5 @@ replace (
 	github.com/operator-framework/operator-lifecycle-manager => ./staging/operator-lifecycle-manager
 	github.com/operator-framework/operator-registry => ./staging/operator-registry
 )
+
+replace github.com/openshift/controller-runtime-common => github.com/joelanford/controller-runtime-common v0.0.0-20260206162334-afe447e6c57e
