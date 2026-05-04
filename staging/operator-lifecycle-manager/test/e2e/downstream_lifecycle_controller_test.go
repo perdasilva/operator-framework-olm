@@ -4,37 +4,31 @@ package e2e
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
+	"strings"
 	"time"
 
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 	"github.com/operator-framework/api/pkg/operators/v1alpha1"
 	"github.com/operator-framework/operator-lifecycle-manager/test/e2e/ctx"
+	batchv1 "k8s.io/api/batch/v1"
 	corev1 "k8s.io/api/core/v1"
-	rbacv1 "k8s.io/api/rbac/v1"
-	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
 const (
-	lcAppLabelKey             = "app"
-	lcAppLabelVal             = "olm-lifecycle-server"
-	lcCatalogNameLabelKey     = "olm.lifecycle-server/catalog-name"
-	lcCRBName                 = "operator-lifecycle-manager-lifecycle-server"
 	lcResourceTimeout         = 5 * time.Minute
-	lcCleanupTimeout          = 2 * time.Minute
+	lcWgetTimeout             = 2 * time.Minute
 	lcCatalogImage            = "quay.io/olmtest/lifecycle-catalog:v1"
 	lcCatalogNoLifecycleImage = "quay.io/olmtest/lifecycle-catalog-no-lifecycle:v1"
 	lcNamespace               = "openshift-marketplace"
+	lcControllerNamespace     = "openshift-operator-lifecycle-manager"
+	lcAPIServiceName          = "lifecycle-controller-api"
+	lcAPIPort                 = 9443
 )
 
-// lcResourceName mirrors the controller's resourceName logic for test assertions.
-func lcResourceName(csName string) string {
-	return csName + "-lifecycle-server"
-}
-
-// createCatalogSourceForLifecycle creates a CatalogSource in openshift-marketplace.
 func createCatalogSourceForLifecycle(name, namespace, image string) (*v1alpha1.CatalogSource, func()) {
 	crc := ctx.Ctx().OperatorClient()
 	cs := &v1alpha1.CatalogSource{
@@ -62,7 +56,6 @@ func createCatalogSourceForLifecycle(name, namespace, image string) (*v1alpha1.C
 	return created, cleanup
 }
 
-// waitForCatalogPodRunning waits until the CatalogSource has a running and ready pod.
 func waitForCatalogPodRunning(namespace, catalogName string) {
 	c := ctx.Ctx().KubeClient()
 	Eventually(func() bool {
@@ -81,7 +74,6 @@ func waitForCatalogPodRunning(namespace, catalogName string) {
 	}, lcResourceTimeout, 5*time.Second).Should(BeTrue(), "catalog pod for %s did not reach Running/Ready", catalogName)
 }
 
-// isPodReady returns true if the pod has a Ready condition set to True.
 func isPodReady(pod *corev1.Pod) bool {
 	for _, c := range pod.Status.Conditions {
 		if c.Type == corev1.PodReady {
@@ -91,70 +83,74 @@ func isPodReady(pod *corev1.Pod) bool {
 	return false
 }
 
-// waitForLifecycleResources waits until all lifecycle-server resources exist for a CatalogSource.
-func waitForLifecycleResources(namespace, catalogName string) {
-	c := ctx.Ctx().KubeClient()
-	name := lcResourceName(catalogName)
-
-	By(fmt.Sprintf("waiting for lifecycle-server resources for %s/%s", namespace, catalogName))
-
-	Eventually(func() error {
-		_, err := c.KubernetesInterface().AppsV1().Deployments(namespace).Get(context.Background(), name, metav1.GetOptions{})
-		return err
-	}, lcResourceTimeout, 5*time.Second).Should(Succeed(), "Deployment %s not created", name)
-
-	Eventually(func() error {
-		_, err := c.KubernetesInterface().CoreV1().Services(namespace).Get(context.Background(), name, metav1.GetOptions{})
-		return err
-	}, lcResourceTimeout, 5*time.Second).Should(Succeed(), "Service %s not created", name)
-
-	Eventually(func() error {
-		_, err := c.KubernetesInterface().CoreV1().ServiceAccounts(namespace).Get(context.Background(), name, metav1.GetOptions{})
-		return err
-	}, lcResourceTimeout, 5*time.Second).Should(Succeed(), "ServiceAccount %s not created", name)
-
-	Eventually(func() error {
-		_, err := c.KubernetesInterface().NetworkingV1().NetworkPolicies(namespace).Get(context.Background(), name, metav1.GetOptions{})
-		return err
-	}, lcResourceTimeout, 5*time.Second).Should(Succeed(), "NetworkPolicy %s not created", name)
+// lifecycleAPIURL builds the URL for the lifecycle API using the controller's API service.
+func lifecycleAPIURL(version, namespace, catalogName, pkg string) string {
+	return fmt.Sprintf("https://%s.%s.svc:%d/api/%s/%s/%s/lifecycles/%s",
+		lcAPIServiceName, lcControllerNamespace, lcAPIPort, version, namespace, catalogName, pkg)
 }
 
-// verifyLifecycleResourcesDeleted waits until all lifecycle-server resources are gone.
-func verifyLifecycleResourcesDeleted(namespace, catalogName string) {
+// runWgetJob creates a one-shot Job that runs wget and returns the HTTP status code and body.
+func runWgetJob(namespace, url string, automountToken bool, extraArgs ...string) (int, string) {
 	c := ctx.Ctx().KubeClient()
-	name := lcResourceName(catalogName)
+	jobName := genName("wget-")
 
-	By(fmt.Sprintf("verifying lifecycle-server resources deleted for %s/%s", namespace, catalogName))
+	args := []string{"-O", "/dev/stdout", "-q"}
+	args = append(args, extraArgs...)
+	args = append(args, url)
 
+	var backoffLimit int32
+	job := &batchv1.Job{
+		ObjectMeta: metav1.ObjectMeta{Name: jobName, Namespace: namespace},
+		Spec: batchv1.JobSpec{
+			BackoffLimit: &backoffLimit,
+			Template: corev1.PodTemplateSpec{
+				Spec: corev1.PodSpec{
+					AutomountServiceAccountToken: &automountToken,
+					Containers: []corev1.Container{{
+						Name:    "wget",
+						Image:   "busybox:latest",
+						Command: []string{"wget"},
+						Args:    args,
+					}},
+					RestartPolicy: corev1.RestartPolicyNever,
+				},
+			},
+		},
+	}
+
+	_, err := c.KubernetesInterface().BatchV1().Jobs(namespace).Create(context.Background(), job, metav1.CreateOptions{})
+	Expect(err).NotTo(HaveOccurred(), "failed to create wget job %s", jobName)
+
+	var succeeded bool
 	Eventually(func() bool {
-		_, err := c.KubernetesInterface().AppsV1().Deployments(namespace).Get(context.Background(), name, metav1.GetOptions{})
-		return apierrors.IsNotFound(err)
-	}, lcCleanupTimeout, 5*time.Second).Should(BeTrue(), "Deployment %s not deleted", name)
+		j, err := c.KubernetesInterface().BatchV1().Jobs(namespace).Get(context.Background(), jobName, metav1.GetOptions{})
+		if err != nil {
+			return false
+		}
+		succeeded = j.Status.Succeeded > 0
+		return succeeded || j.Status.Failed > 0
+	}, lcWgetTimeout, 5*time.Second).Should(BeTrue(), "wget job %s did not complete", jobName)
 
-	Eventually(func() bool {
-		_, err := c.KubernetesInterface().CoreV1().Services(namespace).Get(context.Background(), name, metav1.GetOptions{})
-		return apierrors.IsNotFound(err)
-	}, lcCleanupTimeout, 5*time.Second).Should(BeTrue(), "Service %s not deleted", name)
+	pods, err := c.KubernetesInterface().CoreV1().Pods(namespace).List(context.Background(), metav1.ListOptions{
+		LabelSelector: fmt.Sprintf("job-name=%s", jobName),
+	})
+	Expect(err).NotTo(HaveOccurred(), "failed to list pods for job %s", jobName)
+	Expect(pods.Items).NotTo(BeEmpty(), "no pods found for job %s", jobName)
 
-	Eventually(func() bool {
-		_, err := c.KubernetesInterface().CoreV1().ServiceAccounts(namespace).Get(context.Background(), name, metav1.GetOptions{})
-		return apierrors.IsNotFound(err)
-	}, lcCleanupTimeout, 5*time.Second).Should(BeTrue(), "ServiceAccount %s not deleted", name)
+	logs, err := c.KubernetesInterface().CoreV1().Pods(namespace).GetLogs(pods.Items[0].Name, &corev1.PodLogOptions{}).DoRaw(context.Background())
+	Expect(err).NotTo(HaveOccurred(), "failed to get logs for job pod %s", pods.Items[0].Name)
 
-	Eventually(func() bool {
-		_, err := c.KubernetesInterface().NetworkingV1().NetworkPolicies(namespace).Get(context.Background(), name, metav1.GetOptions{})
-		return apierrors.IsNotFound(err)
-	}, lcCleanupTimeout, 5*time.Second).Should(BeTrue(), "NetworkPolicy %s not deleted", name)
-}
+	if succeeded {
+		return 200, string(logs)
+	}
 
-// crbContainsSubject checks if the ClusterRoleBinding includes a subject for the given SA.
-func crbContainsSubject(crb *rbacv1.ClusterRoleBinding, saName, saNamespace string) bool {
-	for _, s := range crb.Subjects {
-		if s.Kind == "ServiceAccount" && s.Name == saName && s.Namespace == saNamespace {
-			return true
+	logStr := string(logs)
+	for _, code := range []int{401, 403, 404, 503} {
+		if strings.Contains(logStr, fmt.Sprintf("%d", code)) {
+			return code, logStr
 		}
 	}
-	return false
+	return 0, logStr
 }
 
 var _ = Describe("Lifecycle Controller", func() {
@@ -178,60 +174,70 @@ var _ = Describe("Lifecycle Controller", func() {
 			}
 		})
 
-		It("should create lifecycle-server resources", func() {
-			waitForLifecycleResources(lcNamespace, catalogName)
+		It("should serve lifecycle data for a known package", func() {
+			url := lifecycleAPIURL("v1alpha1", lcNamespace, catalogName, "test-lifecycle-operator")
 
-			By("verifying Deployment labels and container")
-			c := ctx.Ctx().KubeClient()
-			name := lcResourceName(catalogName)
-			dep, err := c.KubernetesInterface().AppsV1().Deployments(lcNamespace).Get(context.Background(), name, metav1.GetOptions{})
-			Expect(err).NotTo(HaveOccurred(), "failed to get lifecycle-server Deployment")
-			Expect(dep.Labels[lcAppLabelKey]).To(Equal(lcAppLabelVal), "unexpected app label on Deployment")
-			Expect(dep.Labels[lcCatalogNameLabelKey]).To(Equal(catalogName), "unexpected catalog-name label on Deployment")
-			Expect(dep.Spec.Template.Spec.Containers).NotTo(BeEmpty(), "Deployment has no containers")
-			Expect(dep.Spec.Template.Spec.Containers[0].Name).To(Equal("lifecycle-server"), "unexpected container name")
+			var status int
+			var body string
+			Eventually(func() int {
+				status, body = runWgetJob(lcNamespace, url, true, "--no-check-certificate")
+				return status
+			}, lcResourceTimeout, 10*time.Second).Should(Equal(200), "expected 200 for known package, got body: %s", body)
 
-			By("verifying ClusterRoleBinding includes the ServiceAccount")
-			Eventually(func() bool {
-				crb, err := c.KubernetesInterface().RbacV1().ClusterRoleBindings().Get(context.Background(), lcCRBName, metav1.GetOptions{})
-				if err != nil {
-					return false
-				}
-				return crbContainsSubject(crb, name, lcNamespace)
-			}, lcResourceTimeout, 5*time.Second).Should(BeTrue(), "ClusterRoleBinding should include lifecycle-server SA")
+			var result map[string]any
+			Expect(json.Unmarshal([]byte(body), &result)).To(Succeed(), "response should be valid JSON")
+			Expect(result["package"]).To(Equal("test-lifecycle-operator"))
+			Expect(result["status"]).To(Equal("active"))
+		})
+
+		It("should return 404 for an unknown package", func() {
+			url := lifecycleAPIURL("v1alpha1", lcNamespace, catalogName, "nonexistent")
+
+			var status int
+			Eventually(func() int {
+				status, _ = runWgetJob(lcNamespace, url, true, "--no-check-certificate")
+				return status
+			}, lcResourceTimeout, 10*time.Second).Should(Equal(404))
+		})
+
+		It("should return 404 for an unknown version", func() {
+			url := lifecycleAPIURL("v99", lcNamespace, catalogName, "test-lifecycle-operator")
+
+			var status int
+			Eventually(func() int {
+				status, _ = runWgetJob(lcNamespace, url, true, "--no-check-certificate")
+				return status
+			}, lcResourceTimeout, 10*time.Second).Should(Equal(404))
 		})
 	})
 
 	Context("CatalogSource deletion", func() {
-		It("should clean up lifecycle-server resources when CatalogSource is deleted", func() {
+		It("should return 404 after CatalogSource is deleted", func() {
 			catalogName := genName("lc-del-catalog-")
 			_, cleanup := createCatalogSourceForLifecycle(catalogName, lcNamespace, lcCatalogImage)
 
-			By("waiting for catalog pod and lifecycle-server resources")
+			By("waiting for catalog pod and lifecycle data to be served")
 			waitForCatalogPodRunning(lcNamespace, catalogName)
-			waitForLifecycleResources(lcNamespace, catalogName)
+
+			url := lifecycleAPIURL("v1alpha1", lcNamespace, catalogName, "test-lifecycle-operator")
+			Eventually(func() int {
+				status, _ := runWgetJob(lcNamespace, url, true, "--no-check-certificate")
+				return status
+			}, lcResourceTimeout, 10*time.Second).Should(Equal(200))
 
 			By("deleting the CatalogSource")
 			cleanup()
 
-			By("verifying lifecycle-server resources are cleaned up")
-			verifyLifecycleResourcesDeleted(lcNamespace, catalogName)
-
-			By("verifying ClusterRoleBinding no longer includes the ServiceAccount")
-			c := ctx.Ctx().KubeClient()
-			name := lcResourceName(catalogName)
-			Eventually(func() bool {
-				crb, err := c.KubernetesInterface().RbacV1().ClusterRoleBindings().Get(context.Background(), lcCRBName, metav1.GetOptions{})
-				if err != nil {
-					return apierrors.IsNotFound(err)
-				}
-				return !crbContainsSubject(crb, name, lcNamespace)
-			}, lcCleanupTimeout, 5*time.Second).Should(BeTrue(), "ClusterRoleBinding should not include deleted SA")
+			By("verifying lifecycle API returns 404")
+			Eventually(func() int {
+				status, _ := runWgetJob(lcNamespace, url, true, "--no-check-certificate")
+				return status
+			}, lcResourceTimeout, 10*time.Second).Should(Equal(404))
 		})
 	})
 
 	Context("catalog without lifecycle data", func() {
-		It("should still create lifecycle-server resources", func() {
+		It("should return 404 for API requests", func() {
 			catalogName := genName("lc-nolc-catalog-")
 			_, cleanup := createCatalogSourceForLifecycle(catalogName, lcNamespace, lcCatalogNoLifecycleImage)
 			defer cleanup()
@@ -239,50 +245,13 @@ var _ = Describe("Lifecycle Controller", func() {
 			By("waiting for catalog pod to be running")
 			waitForCatalogPodRunning(lcNamespace, catalogName)
 
-			By("verifying lifecycle-server resources are created")
-			waitForLifecycleResources(lcNamespace, catalogName)
-		})
-	})
+			url := lifecycleAPIURL("v1alpha1", lcNamespace, catalogName, "test-no-lifecycle-operator")
 
-	Context("multiple CatalogSources", func() {
-		It("should create independent resources for each CatalogSource", func() {
-			catalog1 := genName("lc-multi-a-")
-			catalog2 := genName("lc-multi-b-")
-
-			_, cleanup1 := createCatalogSourceForLifecycle(catalog1, lcNamespace, lcCatalogImage)
-			defer cleanup1()
-			_, cleanup2 := createCatalogSourceForLifecycle(catalog2, lcNamespace, lcCatalogNoLifecycleImage)
-			defer cleanup2()
-
-			By("waiting for both catalog pods")
-			waitForCatalogPodRunning(lcNamespace, catalog1)
-			waitForCatalogPodRunning(lcNamespace, catalog2)
-
-			By("verifying resources for first catalog")
-			waitForLifecycleResources(lcNamespace, catalog1)
-
-			By("verifying resources for second catalog")
-			waitForLifecycleResources(lcNamespace, catalog2)
-
-			By("verifying ClusterRoleBinding includes both ServiceAccounts")
-			c := ctx.Ctx().KubeClient()
-			name1 := lcResourceName(catalog1)
-			name2 := lcResourceName(catalog2)
-			Eventually(func() bool {
-				crb, err := c.KubernetesInterface().RbacV1().ClusterRoleBindings().Get(context.Background(), lcCRBName, metav1.GetOptions{})
-				if err != nil {
-					return false
-				}
-				return crbContainsSubject(crb, name1, lcNamespace) && crbContainsSubject(crb, name2, lcNamespace)
-			}, lcResourceTimeout, 5*time.Second).Should(BeTrue(), "ClusterRoleBinding should include both SAs")
-
-			By("verifying Deployments have different catalog-name labels")
-			dep1, err := c.KubernetesInterface().AppsV1().Deployments(lcNamespace).Get(context.Background(), name1, metav1.GetOptions{})
-			Expect(err).NotTo(HaveOccurred())
-			dep2, err := c.KubernetesInterface().AppsV1().Deployments(lcNamespace).Get(context.Background(), name2, metav1.GetOptions{})
-			Expect(err).NotTo(HaveOccurred())
-			Expect(dep1.Labels[lcCatalogNameLabelKey]).To(Equal(catalog1), "first Deployment should reference first catalog")
-			Expect(dep2.Labels[lcCatalogNameLabelKey]).To(Equal(catalog2), "second Deployment should reference second catalog")
+			// Wait for the controller to have pulled the image (negative cache), then verify 404
+			Eventually(func() int {
+				status, _ := runWgetJob(lcNamespace, url, true, "--no-check-certificate")
+				return status
+			}, lcResourceTimeout, 10*time.Second).Should(Equal(404), "expected 404 for catalog without lifecycle data")
 		})
 	})
 })
