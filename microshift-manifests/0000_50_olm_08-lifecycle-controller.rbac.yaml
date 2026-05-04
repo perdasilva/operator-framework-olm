@@ -24,7 +24,7 @@ rules:
   # Read APIServer for TLS security profile configuration
   - apiGroups: ["config.openshift.io"]
     resources: ["apiservers"]
-    verbs: ["get", "list", "watch"]
+    verbs: ["get"]
   # Watch CatalogSources cluster-wide
   - apiGroups: ["operators.coreos.com"]
     resources: ["catalogsources"]
@@ -33,27 +33,11 @@ rules:
   - apiGroups: [""]
     resources: ["pods"]
     verbs: ["get", "list", "watch"]
-  # Manage lifecycle-server deployments
-  - apiGroups: ["apps"]
-    resources: ["deployments"]
-    verbs: ["get", "list", "watch", "create", "patch", "delete"]
-  # Manage lifecycle-server services
+  # Read pull secrets for image pulling
   - apiGroups: [""]
-    resources: ["services"]
-    verbs: ["get", "list", "watch", "create", "patch", "delete"]
-  # Manage lifecycle-server serviceaccounts
-  - apiGroups: [""]
-    resources: ["serviceaccounts"]
-    verbs: ["get", "list", "watch", "create", "patch", "delete"]
-  # Manage lifecycle-server networkpolicies
-  - apiGroups: ["networking.k8s.io"]
-    resources: ["networkpolicies"]
-    verbs: ["get", "list", "watch", "create", "patch", "delete"]
-  # Manage lifecycle-server clusterrolebindings
-  - apiGroups: ["rbac.authorization.k8s.io"]
-    resources: ["clusterrolebindings"]
-    verbs: ["get", "list", "watch", "create", "patch"]
-  # Required to grant these permissions to lifecycle-server via CRB
+    resources: ["secrets"]
+    verbs: ["get"]
+  # Authn/authz for lifecycle API
   - apiGroups: ["authentication.k8s.io"]
     resources: ["tokenreviews"]
     verbs: ["create"]

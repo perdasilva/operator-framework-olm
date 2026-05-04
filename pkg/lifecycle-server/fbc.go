@@ -34,8 +34,8 @@ import (
 // Does not match: 1, v0, v1beta0
 const versionPattern = `v[1-9][0-9]*(?:(?:alpha|beta)[1-9][0-9]*)?`
 
-// schemaVersionRegex matches lifecycle schema versions in FBC blobs
-var schemaVersionRegex = regexp.MustCompile(`^io\.openshift\.operators\.lifecycles\.(` + versionPattern + `)$`)
+// SchemaVersionRegex matches lifecycle schema versions in FBC blobs
+var SchemaVersionRegex = regexp.MustCompile(`^io\.openshift\.operators\.lifecycles\.(` + versionPattern + `)$`)
 
 // LifecycleIndex maps schema version -> package name -> raw JSON blob
 type LifecycleIndex map[string]map[string]json.RawMessage
@@ -61,7 +61,7 @@ func LoadLifecycleData(fbcPath string, log logr.Logger) (LifecycleIndex, error) 
 		}
 
 		// Check if schema matches our pattern
-		matches := schemaVersionRegex.FindStringSubmatch(meta.Schema)
+		matches := SchemaVersionRegex.FindStringSubmatch(meta.Schema)
 		if matches == nil {
 			return nil
 		}

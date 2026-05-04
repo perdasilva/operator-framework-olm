@@ -601,6 +601,7 @@ spec:
             - --catalog-source-field-selector=metadata.namespace=openshift-marketplace
             - --tls-cert=/var/run/secrets/serving-cert/tls.crt
             - --tls-key=/var/run/secrets/serving-cert/tls.key
+            - --api=:9443
           image: quay.io/operator-framework/olm@sha256:de396b540b82219812061d0d753440d5655250c621c753ed1dc67d6154741607
           imagePullPolicy: IfNotPresent
           env:
@@ -610,19 +611,20 @@ spec:
               valueFrom:
                 fieldRef:
                   fieldPath: metadata.namespace
-            - name: LIFECYCLE_SERVER_IMAGE
-              value: quay.io/operator-framework/olm@sha256:de396b540b82219812061d0d753440d5655250c621c753ed1dc67d6154741607
             - name: GOMEMLIMIT
-              value: "5MiB"
+              value: "50MiB"
           resources:
             requests:
               cpu: 10m
-              memory: 10Mi
+              memory: 50Mi
           ports:
             - containerPort: 8081
               name: health
             - containerPort: 8443
               name: metrics
+              protocol: TCP
+            - containerPort: 9443
+              name: api
               protocol: TCP
           volumeMounts:
             - name: serving-cert
@@ -682,6 +684,25 @@ spec:
   type: ClusterIP
 EOF
 
+cat << EOF > manifests/0000_50_olm_08-lifecycle-controller.api-service.yaml
+apiVersion: v1
+kind: Service
+metadata:
+  name: lifecycle-controller-api
+  namespace: openshift-operator-lifecycle-manager
+  annotations:
+    release.openshift.io/feature-set: "TechPreviewNoUpgrade"
+spec:
+  ports:
+    - name: api
+      port: 9443
+      protocol: TCP
+      targetPort: api
+  selector:
+    app: olm-lifecycle-controller
+  type: ClusterIP
+EOF
+
 cat << EOF > manifests/0000_50_olm_08-lifecycle-controller.networkpolicy.yaml
 apiVersion: networking.k8s.io/v1
 kind: NetworkPolicy
@@ -698,9 +719,14 @@ spec:
     - ports:
         - port: 8443
           protocol: TCP
+        - port: 9443
+          protocol: TCP
   egress:
     - ports:
         - port: 6443
+          protocol: TCP
+    - ports:
+        - port: 443
           protocol: TCP
     - ports:
         - port: 53
@@ -735,7 +761,7 @@ rules:
   # Read APIServer for TLS security profile configuration
   - apiGroups: ["config.openshift.io"]
     resources: ["apiservers"]
-    verbs: ["get", "list", "watch"]
+    verbs: ["get"]
   # Watch CatalogSources cluster-wide
   - apiGroups: ["operators.coreos.com"]
     resources: ["catalogsources"]
@@ -744,27 +770,11 @@ rules:
   - apiGroups: [""]
     resources: ["pods"]
     verbs: ["get", "list", "watch"]
-  # Manage lifecycle-server deployments
-  - apiGroups: ["apps"]
-    resources: ["deployments"]
-    verbs: ["get", "list", "watch", "create", "patch", "delete"]
-  # Manage lifecycle-server services
+  # Read pull secrets for image pulling
   - apiGroups: [""]
-    resources: ["services"]
-    verbs: ["get", "list", "watch", "create", "patch", "delete"]
-  # Manage lifecycle-server serviceaccounts
-  - apiGroups: [""]
-    resources: ["serviceaccounts"]
-    verbs: ["get", "list", "watch", "create", "patch", "delete"]
-  # Manage lifecycle-server networkpolicies
-  - apiGroups: ["networking.k8s.io"]
-    resources: ["networkpolicies"]
-    verbs: ["get", "list", "watch", "create", "patch", "delete"]
-  # Manage lifecycle-server clusterrolebindings
-  - apiGroups: ["rbac.authorization.k8s.io"]
-    resources: ["clusterrolebindings"]
-    verbs: ["get", "list", "watch", "create", "patch"]
-  # Required to grant these permissions to lifecycle-server via CRB
+    resources: ["secrets"]
+    verbs: ["get"]
+  # Authn/authz for lifecycle API
   - apiGroups: ["authentication.k8s.io"]
     resources: ["tokenreviews"]
     verbs: ["create"]
@@ -797,24 +807,6 @@ subjects:
     name: lifecycle-controller
     namespace: openshift-operator-lifecycle-manager
 EOF
-
-cat << EOF > manifests/0000_50_olm_09-lifecycle-server.rbac.yaml
-apiVersion: rbac.authorization.k8s.io/v1
-kind: ClusterRole
-metadata:
-  name: operator-lifecycle-manager-lifecycle-server
-  annotations:
-    release.openshift.io/feature-set: "TechPreviewNoUpgrade"
-rules:
-  # Required by kube-rbac-proxy for authn/authz
-  - apiGroups: ["authentication.k8s.io"]
-    resources: ["tokenreviews"]
-    verbs: ["create"]
-  - apiGroups: ["authorization.k8s.io"]
-    resources: ["subjectaccessreviews"]
-    verbs: ["create"]
-EOF
-
 
 add_ibm_managed_cloud_annotations "${ROOT_DIR}/manifests"
 

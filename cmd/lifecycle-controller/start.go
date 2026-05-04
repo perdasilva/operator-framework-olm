@@ -6,8 +6,10 @@ import (
 	"crypto/tls"
 	"errors"
 	"fmt"
+	"net"
 	"net/http"
 	"os"
+	"time"
 
 	"github.com/go-logr/logr"
 	configv1 "github.com/openshift/api/config/v1"
@@ -15,11 +17,10 @@ import (
 	"github.com/openshift/library-go/pkg/crypto"
 	"github.com/openshift/operator-framework-olm/pkg/leaderelection"
 	controllers "github.com/openshift/operator-framework-olm/pkg/lifecycle-controller"
+	server "github.com/openshift/operator-framework-olm/pkg/lifecycle-server"
 	operatorsv1alpha1 "github.com/operator-framework/api/pkg/operators/v1alpha1"
 	"github.com/spf13/cobra"
-	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
-	networkingv1 "k8s.io/api/networking/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/fields"
 	"k8s.io/apimachinery/pkg/labels"
@@ -29,7 +30,6 @@ import (
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/cache"
 	"sigs.k8s.io/controller-runtime/pkg/client"
-	"sigs.k8s.io/controller-runtime/pkg/event"
 	"sigs.k8s.io/controller-runtime/pkg/manager"
 	metricsfilters "sigs.k8s.io/controller-runtime/pkg/metrics/filters"
 	metricsserver "sigs.k8s.io/controller-runtime/pkg/metrics/server"
@@ -37,21 +37,27 @@ import (
 
 const (
 	defaultMetricsAddr     = ":8443"
+	defaultAPIAddr         = ":9443"
 	defaultHealthCheckAddr = ":8081"
 	leaderElectionID       = "lifecycle-controller-lock"
+	shutdownTimeout        = 10 * time.Second
+	readHeaderTimeout      = 5 * time.Second
+	readTimeout            = 10 * time.Second
+	writeTimeout           = 30 * time.Second
+	idleTimeout            = 120 * time.Second
 )
 
 var (
 	disableLeaderElection      bool
 	healthCheckAddr            string
 	metricsAddr                string
+	apiAddr                    string
 	catalogSourceLabelSelector string
 	catalogSourceFieldSelector string
 	tlsCertFile                string
 	tlsKeyFile                 string
 )
 
-// newStartCmd creates the "start" subcommand with all CLI flags.
 func newStartCmd() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:          "start",
@@ -62,17 +68,17 @@ func newStartCmd() *cobra.Command {
 
 	cmd.Flags().StringVar(&healthCheckAddr, "health", defaultHealthCheckAddr, "health check address")
 	cmd.Flags().StringVar(&metricsAddr, "metrics", defaultMetricsAddr, "metrics address")
+	cmd.Flags().StringVar(&apiAddr, "api", defaultAPIAddr, "lifecycle API address")
 	cmd.Flags().BoolVar(&disableLeaderElection, "disable-leader-election", false, "disable leader election")
 	cmd.Flags().StringVar(&catalogSourceLabelSelector, "catalog-source-label-selector", "", "label selector for catalog sources to manage (empty means all)")
 	cmd.Flags().StringVar(&catalogSourceFieldSelector, "catalog-source-field-selector", "", "field selector for catalog sources to manage (empty means all)")
-	cmd.Flags().StringVar(&tlsCertFile, "tls-cert", "", "path to TLS certificate file for metrics server")
-	cmd.Flags().StringVar(&tlsKeyFile, "tls-key", "", "path to TLS key file for metrics server")
+	cmd.Flags().StringVar(&tlsCertFile, "tls-cert", "", "path to TLS certificate file")
+	cmd.Flags().StringVar(&tlsKeyFile, "tls-key", "", "path to TLS key file")
 	_ = cmd.MarkFlagRequired("tls-cert")
 	_ = cmd.MarkFlagRequired("tls-key")
 	return cmd
 }
 
-// run is the main entrypoint for the "start" command.
 func run(_ *cobra.Command, _ []string) error {
 	ctx := ctrl.SetupSignalHandler()
 	ctrl.SetLogger(klog.NewKlogr())
@@ -84,37 +90,59 @@ func run(_ *cobra.Command, _ []string) error {
 	}
 	logConfig(cfg, setupLog)
 
+	lifecycleCache := controllers.NewLifecycleCache()
+
 	mgr, err := setupManager(cfg)
 	if err != nil {
 		return fmt.Errorf("failed to setup manager instance: %w", err)
 	}
 
-	tlsProfileChan, err := setupTLSProfileWatcher(mgr, cfg)
+	if err := setupLifecycleController(mgr, cfg, lifecycleCache); err != nil {
+		return fmt.Errorf("unable to setup lifecycle controller: %w", err)
+	}
+
+	apiServer, err := setupAPIServer(cfg, lifecycleCache)
 	if err != nil {
-		return fmt.Errorf("unable to setup TLS profile watcher: %w", err)
-	}
-	// Do not close tlsProfileChan here — the OnProfileChange callback may
-	// write to it concurrently during shutdown. The channel is GC'd when
-	// both the sender (callback) and receiver (controller) go out of scope.
-
-	if err := setupLifecycleServerController(mgr, cfg, tlsProfileChan); err != nil {
-		return fmt.Errorf("unable to setup lifecycle server controller: %w", err)
+		return fmt.Errorf("failed to setup API server: %w", err)
 	}
 
+	// Start API server in background
+	errChan := make(chan error, 1)
+	go func() {
+		setupLog.Info("starting lifecycle API server", "addr", apiAddr)
+		if err := apiServer.ListenAndServeTLS("", ""); err != nil && !errors.Is(err, http.ErrServerClosed) {
+			errChan <- fmt.Errorf("lifecycle API server error: %w", err)
+		}
+	}()
+
+	// Start manager (blocks until context is cancelled)
 	setupLog.Info("starting manager")
-	if err := mgr.Start(ctx); err != nil {
-		return fmt.Errorf("unable to start manager: %w", err)
+	mgrErr := mgr.Start(ctx)
+
+	// Graceful shutdown of API server
+	shutdownCtx, cancel := context.WithTimeout(context.Background(), shutdownTimeout)
+	defer cancel()
+	if err := apiServer.Shutdown(shutdownCtx); err != nil {
+		setupLog.Error(err, "failed to gracefully shutdown API server")
 	}
 
-	return nil
+	// Check for API server error
+	select {
+	case err := <-errChan:
+		if mgrErr != nil {
+			return mgrErr
+		}
+		return err
+	default:
+	}
+
+	return mgrErr
 }
 
-// startConfig holds validated startup configuration for the controller.
 type startConfig struct {
 	Namespace string
 	Version   string
 
-	ServerImage                string
 	CatalogSourceFieldSelector fields.Selector
 	CatalogSourceLabelSelector labels.Selector
 	RESTConfig                 *rest.Config
@@ -127,22 +155,15 @@ type startConfig struct {
 	EnableTLSProfileWatcher bool
 }
 
-// loadStartConfig reads environment variables, parses CLI flags, and builds
-// the startup configuration including TLS, selectors, and leader election.
 func loadStartConfig(ctx context.Context) (*startConfig, error) {
 	cfg := &startConfig{
-		Namespace:   os.Getenv("NAMESPACE"),
-		Version:     cmp.Or(os.Getenv("RELEASE_VERSION"), "unknown"),
-		ServerImage: os.Getenv("LIFECYCLE_SERVER_IMAGE"),
+		Namespace: os.Getenv("NAMESPACE"),
+		Version:   cmp.Or(os.Getenv("RELEASE_VERSION"), "unknown"),
 	}
 	if cfg.Namespace == "" && !disableLeaderElection {
 		return nil, fmt.Errorf("NAMESPACE environment variable is required when leader election is enabled")
 	}
-	if cfg.ServerImage == "" {
-		return nil, fmt.Errorf("LIFECYCLE_SERVER_IMAGE environment variable is required")
-	}
 
-	// Using a function to load the keypair each time means that we automatically pick up the new certificate when it reloads.
 	getCertificate := func(_ *tls.ClientHelloInfo) (*tls.Certificate, error) {
 		cert, err := tls.LoadX509KeyPair(tlsCertFile, tlsKeyFile)
 		if err != nil {
@@ -150,10 +171,11 @@ func loadStartConfig(ctx context.Context) (*startConfig, error) {
 		}
 		return &cert, nil
 	}
-	_, err := getCertificate(nil)
-	if err != nil {
+	if _, err := getCertificate(nil); err != nil {
 		return nil, fmt.Errorf("failed to load TLS certificate/key: %w", err)
 	}
+
+	var err error
 	cfg.CatalogSourceFieldSelector, err = fields.ParseSelector(catalogSourceFieldSelector)
 	if err != nil {
 		return nil, fmt.Errorf("failed to parse catalog source field selector %q: %w", catalogSourceFieldSelector, err)
@@ -177,10 +199,8 @@ func loadStartConfig(ctx context.Context) (*startConfig, error) {
 	return cfg, nil
 }
 
-// logConfig emits structured log lines summarizing the startup configuration.
 func logConfig(cfg *startConfig, log logr.Logger) {
 	log.Info("starting lifecycle-controller", "version", cfg.Version)
-	log.Info("config", "lifecycleServerImage", cfg.ServerImage)
 	if !cfg.CatalogSourceLabelSelector.Empty() {
 		log.Info("config", "catalogSourceLabelSelector", cfg.CatalogSourceLabelSelector.String())
 	}
@@ -195,8 +215,6 @@ func logConfig(cfg *startConfig, log logr.Logger) {
 	}
 }
 
-// getInitialTLSProfile fetches the cluster's TLS security profile from the
-// APIServer resource. Returns the default profile if the resource is unavailable.
 func getInitialTLSProfile(ctx context.Context, restConfig *rest.Config, sch *runtime.Scheme) (configv1.TLSProfileSpec, bool, error) {
 	cl, err := client.New(restConfig, client.Options{Scheme: sch})
 	if err != nil {
@@ -212,8 +230,6 @@ func getInitialTLSProfile(ctx context.Context, restConfig *rest.Config, sch *run
 	return initialTLSProfileSpec, true, nil
 }
 
-// setupManager creates the controller-runtime manager with metrics, health
-// checks, leader election, and scoped caches.
 func setupManager(cfg *startConfig) (manager.Manager, error) {
 	mgr, err := ctrl.NewManager(cfg.RESTConfig, manager.Options{
 		Scheme: cfg.Scheme,
@@ -240,22 +256,7 @@ func setupManager(cfg *startConfig) (manager.Manager, error) {
 			ByObject: map[client.Object]cache.ByObject{
 				&operatorsv1alpha1.CatalogSource{}: {},
 				&corev1.Pod{}: {
-					Label: catalogPodLabelSelector(),
-				},
-				&appsv1.Deployment{}: {
-					Label: controllers.LifecycleServerLabelSelector(),
-				},
-				&corev1.ServiceAccount{}: {
-					Label: controllers.LifecycleServerLabelSelector(),
-				},
-				&corev1.Service{}: {
-					Label: controllers.LifecycleServerLabelSelector(),
-				},
-				&networkingv1.NetworkPolicy{}: {
-					Label: controllers.LifecycleServerLabelSelector(),
-				},
-				&configv1.APIServer{}: {
-					Field: fields.SelectorFromSet(fields.Set{"metadata.name": "cluster"}),
+					Label: controllers.CatalogPodLabelSelector(),
 				},
 			},
 		},
@@ -277,55 +278,62 @@ func setupManager(cfg *startConfig) (manager.Manager, error) {
 	return mgr, nil
 }
 
-// setupTLSProfileWatcher registers a controller that watches the APIServer TLS
-// profile and sends change events on the returned channel.
-func setupTLSProfileWatcher(mgr manager.Manager, cfg *startConfig) (chan event.TypedGenericEvent[configv1.TLSProfileSpec], error) {
-	tlsChangeChan := make(chan event.TypedGenericEvent[configv1.TLSProfileSpec], 1)
+func setupAPIServer(cfg *startConfig, lifecycleCache *controllers.LifecycleCache) (*http.Server, error) {
+	log := ctrl.Log.WithName("api-server")
 
-	if !cfg.EnableTLSProfileWatcher {
-		return tlsChangeChan, nil
+	lookup := func(namespace, name string) (server.LifecycleIndex, bool) {
+		entry, found := lifecycleCache.Get(namespace, name)
+		if !found {
+			return nil, false
+		}
+		return entry.Data, true
 	}
 
-	log := ctrl.Log.WithName("tls-profile")
-	tlsProfileReconciler := tlsutil.SecurityProfileWatcher{
-		Client:                mgr.GetClient(),
-		InitialTLSProfileSpec: cfg.InitialTLSProfileSpec,
-		OnProfileChange: func(ctx context.Context, oldTLSProfileSpec, newTLSProfileSpec configv1.TLSProfileSpec) {
-			cfg.TLSConfigProvider.UpdateProfile(newTLSProfileSpec)
-			log.Info("applying new TLS profile spec",
-				"minVersion", newTLSProfileSpec.MinTLSVersion,
-				"cipherSuites", newTLSProfileSpec.Ciphers,
-			)
+	handler := server.NewHandler(lookup, log)
 
-			_, unsupportedCiphers := cfg.TLSConfigProvider.Get()
-			if len(unsupportedCiphers) > 0 {
-				log.Info("ignoring unsupported ciphers found in TLS profile", "unsupportedCiphers", unsupportedCiphers)
-			}
-			tlsChangeChan <- event.TypedGenericEvent[configv1.TLSProfileSpec]{Object: newTLSProfileSpec}
+	tlsCfg, _ := cfg.TLSConfigProvider.Get()
+	apiTLSConfig := tlsCfg.Clone()
+	apiTLSConfig.GetConfigForClient = func(*tls.ClientHelloInfo) (*tls.Config, error) {
+		cfg, _ := cfg.TLSConfigProvider.Get()
+		return cfg, nil
+	}
+
+	return &http.Server{
+		Addr:              apiAddr,
+		Handler:           handler,
+		TLSConfig:         apiTLSConfig,
+		ReadHeaderTimeout: readHeaderTimeout,
+		ReadTimeout:       readTimeout,
+		WriteTimeout:      writeTimeout,
+		IdleTimeout:       idleTimeout,
+		BaseContext: func(l net.Listener) context.Context {
+			return context.Background()
 		},
-	}
-
-	if err := tlsProfileReconciler.SetupWithManager(mgr); err != nil {
-		return nil, err
-	}
-	return tlsChangeChan, nil
+	}, nil
 }
 
-// setupLifecycleServerController creates and registers the lifecycle-server
-// reconciler with the manager.
-func setupLifecycleServerController(mgr manager.Manager, cfg *startConfig, tlsProfileChan <-chan event.TypedGenericEvent[configv1.TLSProfileSpec]) error {
-	reconciler := &controllers.LifecycleServerReconciler{
+func setupLifecycleController(mgr manager.Manager, cfg *startConfig, lifecycleCache *controllers.LifecycleCache) error {
+	log := ctrl.Log.WithName("controllers").WithName("lifecycle")
+
+	// Use a direct (uncached) client for secret reads to avoid caching all
+	// cluster secrets and to keep RBAC minimal (get only, no list/watch).
+	directClient, err := client.New(cfg.RESTConfig, client.Options{Scheme: cfg.Scheme})
+	if err != nil {
+		return fmt.Errorf("failed to create direct client for puller: %w", err)
+	}
+	puller := controllers.NewImagePuller(directClient, log)
+
+	reconciler := &controllers.LifecycleReconciler{
 		Client:                     mgr.GetClient(),
-		Log:                        ctrl.Log.WithName("controllers").WithName("lifecycle-server"),
-		Scheme:                     mgr.GetScheme(),
-		ServerImage:                cfg.ServerImage,
+		Log:                        log,
+		Cache:                      lifecycleCache,
+		Puller:                     puller,
 		CatalogSourceLabelSelector: cfg.CatalogSourceLabelSelector,
 		CatalogSourceFieldSelector: cfg.CatalogSourceFieldSelector,
-		TLSConfigProvider:          cfg.TLSConfigProvider,
 	}
 
-	if err := reconciler.SetupWithManager(mgr, tlsProfileChan); err != nil {
-		return fmt.Errorf("unable to setup lifecycle server controller: %w", err)
+	if err := reconciler.SetupWithManager(mgr); err != nil {
+		return fmt.Errorf("unable to setup lifecycle controller: %w", err)
 	}
 	return nil
 }

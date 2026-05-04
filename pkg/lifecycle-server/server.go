@@ -22,21 +22,21 @@ import (
 	"github.com/go-logr/logr"
 )
 
+// CacheLookup is a function that retrieves cached lifecycle data for a catalog source.
+// Returns the LifecycleIndex and true if the entry exists (even if empty/negative cache),
+// or nil and false if the catalog source has not been cached.
+type CacheLookup func(namespace, name string) (LifecycleIndex, bool)
+
 // NewHealthHandler creates an HTTP handler for health and readiness probes.
-// The /healthz endpoint always returns 200. The /readyz endpoint returns 200
-// if lifecycle data is loaded, or 503 if the index is empty.
-func NewHealthHandler(data LifecycleIndex) http.Handler {
+// The /healthz endpoint always returns 200. The /readyz endpoint always returns 200
+// (the controller is healthy regardless of cached data).
+func NewHealthHandler() http.Handler {
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /healthz", func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusOK)
 		_, _ = w.Write([]byte("ok"))
 	})
 	mux.HandleFunc("GET /readyz", func(w http.ResponseWriter, r *http.Request) {
-		if len(data) == 0 {
-			w.WriteHeader(http.StatusServiceUnavailable)
-			_, _ = w.Write([]byte("no lifecycle data loaded"))
-			return
-		}
 		w.WriteHeader(http.StatusOK)
 		_, _ = w.Write([]byte("ok"))
 	})
@@ -44,42 +44,46 @@ func NewHealthHandler(data LifecycleIndex) http.Handler {
 }
 
 // NewHandler creates an HTTP handler for the lifecycle API.
-// It serves GET /api/{version}/lifecycles/{package}, returning the raw JSON
-// blob for the given version and package, 404 if not found, or 503 if no
-// lifecycle data is loaded.
-func NewHandler(data LifecycleIndex, log logr.Logger) http.Handler {
+// It serves GET /api/{version}/{namespace}/{name}/lifecycles/{package}, returning the raw JSON
+// blob for the given catalog source, version, and package, or 404 if not found.
+func NewHandler(lookup CacheLookup, log logr.Logger) http.Handler {
 	mux := http.NewServeMux()
 
-	// GET /api/{version}/lifecycles/{package}
-	mux.HandleFunc("GET /api/{version}/lifecycles/{package}", func(w http.ResponseWriter, r *http.Request) {
+	mux.HandleFunc("GET /api/{version}/{namespace}/{name}/lifecycles/{package}", func(w http.ResponseWriter, r *http.Request) {
 		version := r.PathValue("version")
+		namespace := r.PathValue("namespace")
+		name := r.PathValue("name")
 		pkg := r.PathValue("package")
 
-		// If no lifecycle data is available, return 503 Service Unavailable
-		if len(data) == 0 {
-			log.V(1).Info("no lifecycle data available, returning 503")
-			http.Error(w, "No lifecycle data available", http.StatusServiceUnavailable)
+		data, found := lookup(namespace, name)
+		if !found {
+			log.V(1).Info("catalog source not cached", "namespace", namespace, "name", name)
+			http.NotFound(w, r)
 			return
 		}
 
-		// Look up version in index
+		// Negative cache: image was pulled but had no lifecycle data
+		if len(data) == 0 {
+			log.V(1).Info("catalog source has no lifecycle data", "namespace", namespace, "name", name)
+			http.NotFound(w, r)
+			return
+		}
+
 		versionData, ok := data[version]
 		if !ok {
-			log.V(1).Info("version not found", "version", version, "package", pkg)
+			log.V(1).Info("version not found", "namespace", namespace, "name", name, "version", version)
 			http.NotFound(w, r)
 			return
 		}
 
-		// Look up package in version
 		rawJSON, ok := versionData[pkg]
 		if !ok {
-			log.V(1).Info("package not found", "version", version, "package", pkg)
+			log.V(1).Info("package not found", "namespace", namespace, "name", name, "version", version, "package", pkg)
 			http.NotFound(w, r)
 			return
 		}
 
-		log.V(1).Info("returning lifecycle data", "version", version, "package", pkg)
-
+		log.V(1).Info("returning lifecycle data", "namespace", namespace, "name", name, "version", version, "package", pkg)
 		w.Header().Set("Content-Type", "application/json")
 		if _, err := w.Write(rawJSON); err != nil {
 			log.V(1).Error(err, "failed to write response")

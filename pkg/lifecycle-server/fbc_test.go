@@ -92,7 +92,7 @@ func TestSchemaVersionRegex(t *testing.T) {
 
 	for _, tc := range tt {
 		t.Run(tc.name, func(t *testing.T) {
-			matches := schemaVersionRegex.FindStringSubmatch(tc.input)
+			matches := SchemaVersionRegex.FindStringSubmatch(tc.input)
 			if tc.matches {
 				require.NotNil(t, matches, "expected %q to match", tc.input)
 				require.Equal(t, tc.version, matches[1], "extracted version mismatch for %q", tc.input)

@@ -41,7 +41,6 @@ COPY --from=builder /build/bin/psm /bin/psm
 COPY --from=builder /build/bin/copy-content /bin/copy-content
 COPY --from=builder /tmp/build/olmv0-tests-ext.gz /usr/bin/olmv0-tests-ext.gz
 COPY --from=builder /build/bin/lifecycle-controller /bin/lifecycle-controller
-COPY --from=builder /build/bin/lifecycle-server /bin/lifecycle-server
 
 # This image doesn't need to run as root user.
 USER 1001
