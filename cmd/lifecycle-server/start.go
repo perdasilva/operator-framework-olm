@@ -134,15 +134,16 @@ func run(_ *cobra.Command, _ []string) error {
 
 	// Load lifecycle data from FBC
 	log.Info("loading lifecycle data from FBC", "path", fbcPath)
-	data, err := server.LoadLifecycleData(fbcPath, log)
-	if err != nil {
-		return fmt.Errorf("failed to load lifecycle data: %w", err)
+	data, loadErr := server.LoadLifecycleData(fbcPath, log)
+	if loadErr != nil {
+		log.Error(loadErr, "failed to load lifecycle data")
+	} else {
+		log.Info("loaded lifecycle data",
+			"packageCount", data.CountPackages(),
+			"blobCount", data.CountBlobs(),
+			"versions", data.ListVersions(),
+		)
 	}
-	log.Info("loaded lifecycle data",
-		"packageCount", data.CountPackages(),
-		"blobCount", data.CountBlobs(),
-		"versions", data.ListVersions(),
-	)
 
 	// Create HTTP apiHandler with authn/authz middleware
 	baseHandler := server.NewHandler(data, log)
@@ -153,7 +154,7 @@ func run(_ *cobra.Command, _ []string) error {
 	}
 
 	// Create health handler (no auth required)
-	healthHandler := server.NewHealthHandler(data)
+	healthHandler := server.NewHealthHandler(loadErr == nil)
 
 	// Create servers
 	apiServer := cancelableServer{
