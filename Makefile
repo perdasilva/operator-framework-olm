@@ -31,6 +31,7 @@ COLLECT_PROFILES_CMD := $(addprefix bin/, collect-profiles)
 OPM := $(addprefix bin/, opm)
 OLM_CMDS  := $(shell go list -mod=vendor $(OLM_PKG)/cmd/...)
 PSM_CMD := $(addprefix bin/, psm)
+LIFECYCLE_SERVER_CMD := $(addprefix bin/, lifecycle-server)
 REGISTRY_CMDS  := $(addprefix bin/, $(shell ls staging/operator-registry/cmd | grep -v opm))
 
 # Default image tag for build/olm-container and build/registry-container
@@ -77,7 +78,7 @@ build/registry:
 	$(MAKE) $(REGISTRY_CMDS) $(OPM)
 
 build/olm:
-	$(MAKE) $(PSM_CMD) $(OLM_CMDS) $(COLLECT_PROFILES_CMD) bin/copy-content
+	$(MAKE) $(PSM_CMD) $(OLM_CMDS) $(COLLECT_PROFILES_CMD) bin/copy-content $(LIFECYCLE_SERVER_CMD)
 
 $(OPM): version_flags=-ldflags "-X '$(REGISTRY_PKG)/cmd/opm/version.gitCommit=$(GIT_COMMIT)' -X '$(REGISTRY_PKG)/cmd/opm/version.opmVersion=$(OPM_VERSION)' -X '$(REGISTRY_PKG)/cmd/opm/version.buildDate=$(BUILD_DATE)'"
 $(OPM):
@@ -96,6 +97,9 @@ $(PSM_CMD): FORCE
 
 $(COLLECT_PROFILES_CMD): FORCE
 	go build $(GO_BUILD_OPTS) $(GO_BUILD_TAGS) -o $(COLLECT_PROFILES_CMD) $(ROOT_PKG)/cmd/collect-profiles
+
+$(LIFECYCLE_SERVER_CMD): FORCE
+	go build $(GO_BUILD_OPTS) $(GO_BUILD_TAGS) -o $(LIFECYCLE_SERVER_CMD) $(ROOT_PKG)/cmd/lifecycle-server
 
 .PHONY: cross
 cross: version_flags=-X '$(REGISTRY_PKG)/cmd/opm/version.gitCommit=$(GIT_COMMIT)' -X '$(REGISTRY_PKG)/cmd/opm/version.opmVersion=$(OPM_VERSION)' -X '$(REGISTRY_PKG)/cmd/opm/version.buildDate=$(BUILD_DATE)'
@@ -132,6 +136,9 @@ unit/api:
 
 unit/psm:
 	go test $(ROOT_DIR)/pkg/package-server-manager/...
+
+unit/lifecycle-server:
+	go test $(ROOT_DIR)/pkg/lifecycle-server/...
 
 unit: ## Run unit tests
 	$(ROOT_DIR)/scripts/unit.sh
