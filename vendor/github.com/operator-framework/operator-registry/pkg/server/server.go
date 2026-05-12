@@ -2,6 +2,12 @@ package server
 
 import (
 	"context"
+	"encoding/json"
+	"strings"
+
+	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/status"
+	"google.golang.org/protobuf/types/known/structpb"
 
 	"github.com/operator-framework/operator-registry/pkg/api"
 	"github.com/operator-framework/operator-registry/pkg/registry"
@@ -97,4 +103,35 @@ func (s *RegistryServer) GetLatestChannelEntriesThatProvide(req *api.GetLatestPr
 
 func (s *RegistryServer) GetDefaultBundleThatProvides(ctx context.Context, req *api.GetDefaultProviderRequest) (*api.Bundle, error) {
 	return s.store.GetBundleThatProvides(ctx, req.GetGroup(), req.GetVersion(), req.GetKind())
+}
+
+func (s *RegistryServer) ListPackageCustomSchemas(req *api.ListPackageCustomSchemasRequest, stream api.Registry_ListPackageCustomSchemasServer) error {
+	schema, pkgName := req.GetSchema(), req.GetPackageName()
+	if schema == "" || pkgName == "" {
+		return status.Errorf(codes.InvalidArgument, "schema and packageName are required")
+	}
+	for _, v := range []string{schema, pkgName} {
+		if strings.ContainsAny(v, "/\\") || v == ".." {
+			return status.Errorf(codes.InvalidArgument, "schema and packageName must not contain path separators or '..'")
+		}
+	}
+	type customSchemaQuerier interface {
+		ListPackageCustomSchemas(ctx context.Context, schema, packageName string, sender func([]byte) error) error
+	}
+	mq, ok := s.store.(customSchemaQuerier)
+	if !ok {
+		return status.Errorf(codes.Unimplemented, "store does not support custom schema queries")
+	}
+	return mq.ListPackageCustomSchemas(stream.Context(), schema, pkgName,
+		func(blob []byte) error {
+			var m map[string]interface{}
+			if err := json.Unmarshal(blob, &m); err != nil {
+				return status.Errorf(codes.Internal, "unmarshal custom schema blob: %v", err)
+			}
+			st, err := structpb.NewStruct(m)
+			if err != nil {
+				return status.Errorf(codes.Internal, "convert custom schema blob to struct: %v", err)
+			}
+			return stream.Send(st)
+		})
 }

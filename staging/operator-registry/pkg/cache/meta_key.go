@@ -1,0 +1,31 @@
+package cache
+
+import (
+	"fmt"
+	"strings"
+)
+
+func validateMetaKeyComponent(name, value string) error {
+	if value == "" {
+		return fmt.Errorf("invalid %s: must not be empty", name)
+	}
+	if strings.ContainsAny(value, "/\\") || value == ".." || strings.HasPrefix(value, "../") || strings.HasSuffix(value, "/..") {
+		return fmt.Errorf("invalid %s %q: must not contain path separators or '..'", name, value)
+	}
+	return nil
+}
+
+func newValidatedMetaKey(schema, packageName string) (metaKey, error) {
+	if err := validateMetaKeyComponent("schema", schema); err != nil {
+		return metaKey{}, err
+	}
+	if err := validateMetaKeyComponent("packageName", packageName); err != nil {
+		return metaKey{}, err
+	}
+	return metaKey{Schema: schema, PackageName: packageName}, nil
+}
+
+type metaKey struct {
+	Schema      string
+	PackageName string
+}
